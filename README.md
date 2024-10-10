@@ -4,6 +4,7 @@ This repository contains all of Crafted's Google Cloud Functions. These function
 
 ## Folder Structure
 
+```bash
 crafted_cloud_functions/
 │
 ├── functions/
@@ -18,6 +19,7 @@ crafted_cloud_functions/
 │
 ├── .gitignore
 └── README.md
+```
 
 Each function folder contains:
 - `index.js`: Main entry point for the function
