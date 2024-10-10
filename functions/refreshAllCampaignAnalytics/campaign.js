@@ -123,7 +123,11 @@ const refreshAllCampaignAnalytics = async (req, res) => {
 
               try {
                 // Make call to TikTok API
-                const tiktokResponse = await fetchTikTokData(post, campaign_id, task_id);
+                const tiktokResponse = await fetchTikTokData(
+                  post,
+                  campaign_id,
+                  task_id,
+                );
 
                 if (tiktokResponse) {
                   performance_data = {
@@ -189,11 +193,13 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                   `https://open.tiktokapis.com/v2/video/query/?fields=id,share_count,like_count,comment_count,view_count`,
                   options,
                 );
-                
+
                 const responseData = await response.json();
 
                 if (!responseData.data.videos.length) {
-                  throw new Error("Failed to fetch from TikTok API. No videos found.");
+                  throw new Error(
+                    "Failed to fetch from TikTok API. No videos found.",
+                  );
                 }
 
                 return responseData;
@@ -213,16 +219,25 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                   );
                   // Get the last object that starts with "-"
                   const postKeys = Object.keys(postsData);
-                  console.log("Post data: ", postsData)
+                  console.log("Post data: ", postsData);
                   const lastObjectKey = postKeys
                     .filter((key) => key.startsWith("-"))
                     .sort()
                     .pop();
                   if (lastObjectKey) {
-                    console.log("PostsData taken: ", postsData[lastObjectKey])
+                    console.log("PostsData taken: ", postsData[lastObjectKey]);
                     // Get the metrics from that object
-                    const metrics = postsData[lastObjectKey].performance;
                     // Create a new analytics object
+
+                    if (!isPostValid(postsData)) {
+                      console.log(
+                        "Invalid post data: ",
+                        postsData[lastObjectKey],
+                      );
+                      return null;
+                    }
+
+                    const { performance: metrics } = postsData[lastObjectKey];
                     const analytics = {
                       likes: metrics.likes,
                       comments: metrics.comments,
@@ -550,12 +565,10 @@ const refreshAllCampaignAnalytics = async (req, res) => {
           }
         }
       }
-      res
-        .status(200)
-        .json({
-          statuscode: 200,
-          message: "Successfully updated campaign analytics",
-        });
+      res.status(200).json({
+        statuscode: 200,
+        message: "Successfully updated campaign analytics",
+      });
     } catch (error) {
       console.error("Error finding campaigns for brand", error);
       res
@@ -563,6 +576,18 @@ const refreshAllCampaignAnalytics = async (req, res) => {
         .json({ statuscode: 500, message: "Failed to find campaigns." });
     }
   });
+};
+
+const isPostValid = (post) => {
+  const { performance: metrics } = post;
+
+  return (
+    metrics &&
+    "likes" in metrics &&
+    "comments" in metrics &&
+    "shares" in metrics &&
+    "views" in metrics
+  );
 };
 
 module.exports = {
