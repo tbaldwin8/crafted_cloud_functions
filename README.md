@@ -31,14 +31,15 @@ Each function folder contains:
 
 Each folder inside the `functions` directory represents a separate Google Cloud Function:
 
-1. **getBalancedUsers**: Retrieves a balanced list of users, possibly for fair distribution or load balancing purposes.
-2. **loadUsers**: Loads user data in batches, with filtering capabilities based on search queries.
+1. **getBalancedUsers**: Retrieves a list of users with their balances.
+2. **loadUsers**: Loads and reformat user data.
 3. **processInstagramComments**: Processes comments from Instagram posts, likely for analytics or moderation.
 4. **refreshAllCampaignAnalytics**: Refreshes analytics data for all campaigns, including data from TikTok and Instagram.
-5. **refreshInstagramRates**: Updates Instagram engagement rates for influencers or campaigns.
-6. **refreshTokens**: Refreshes authentication tokens, possibly for maintaining access to third-party APIs.
-7. **studioOutreach**: Handles outreach tasks related to studio activities.
-8. **updateInstagramDemographics**: Updates demographic information based on Instagram data.
+5. **refreshInstagramRates**: Updates Instagram suggested rates for creators.
+6. **refreshTikTokRates**: Updates TikTok suggested rates for creators.
+7. **refreshTokens**: Refreshes authentication tokens for maintaining access to third-party APIs.
+8. **studioOutreach**: Handles creators email sending for campaign briefs.
+9. **updateInstagramDemographics**: Updates demographic information based on Instagram data.
 
 ## Local Development Setup
 
