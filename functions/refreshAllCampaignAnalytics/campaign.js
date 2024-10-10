@@ -123,7 +123,8 @@ const refreshAllCampaignAnalytics = async (req, res) => {
 
               try {
                 // Make call to TikTok API
-                const tiktokResponse = await fetchTikTokData(post);
+                const tiktokResponse = await fetchTikTokData(post, campaign_id, task_id);
+
                 if (tiktokResponse) {
                   performance_data = {
                     likes: tiktokResponse.data.videos[0].like_count,
@@ -188,7 +189,14 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                   `https://open.tiktokapis.com/v2/video/query/?fields=id,share_count,like_count,comment_count,view_count`,
                   options,
                 );
-                return await response.json();
+                
+                const responseData = await response.json();
+
+                if (!responseData.data.videos.length) {
+                  throw new Error("Failed to fetch from TikTok API. No videos found.");
+                }
+
+                return responseData;
               } catch (error) {
                 console.log("Error w/ TikTok API: " + error);
                 // Fetch the initial data from Firebase
@@ -201,15 +209,17 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                 const postsData = postsSnapshot.val();
                 if (postsData) {
                   console.log(
-                    "tiktok api failed: retrieving data from Firebase",
+                    "TikTok api failed: retrieving data from Firebase",
                   );
                   // Get the last object that starts with "-"
                   const postKeys = Object.keys(postsData);
+                  console.log("Post data: ", postsData)
                   const lastObjectKey = postKeys
                     .filter((key) => key.startsWith("-"))
                     .sort()
                     .pop();
                   if (lastObjectKey) {
+                    console.log("PostsData taken: ", postsData[lastObjectKey])
                     // Get the metrics from that object
                     const metrics = postsData[lastObjectKey].performance;
                     // Create a new analytics object
