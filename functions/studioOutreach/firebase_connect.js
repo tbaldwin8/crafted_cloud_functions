@@ -5,7 +5,7 @@ var serviceAccount = require("./serviceAccountKey.json");
 
 const app = admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://crafted-dev-v1-default-rtdb.firebaseio.com"
+  databaseURL: "https://crafted-v1.firebaseio.com"
 });
 
 module.exports = app;
