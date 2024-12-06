@@ -10,8 +10,10 @@ const fetchAndUpdateInstagramDemographics = async (req, res) => {
     const usersData = usersSnapshot.val();
 
     for (const userId in usersData) {
-      if (usersData.hasOwnProperty(userId)) {
+      if (userId === "ni94R9gsoERoO4XtUcD2LyFe7XP2") {
+        console.log("User ID: ", userId);
         const userData = usersData[userId];
+        console.log("User Data: ", userData);
         const instagramInfo = userData.creator_socials && userData.creator_socials.instagram;
 
         if (instagramInfo && instagramInfo.instagram_business_account_id && instagramInfo.access_token) {
