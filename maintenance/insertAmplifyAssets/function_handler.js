@@ -16,7 +16,7 @@ const insertCampaignDrafts = async (req, res) => {
         const taskId = row["taskId"];
         const brandId = row["brandId"];
         const creatorId = row["creatorId"];
-        const s3Link = row["s3Link"];
+        const s3Link = row["s3 links"];
 
         const logObject = { campaignId, taskId, creatorId, s3Link };
 
@@ -39,7 +39,11 @@ const insertCampaignDrafts = async (req, res) => {
 
         let brandAssetId = null;
         for (const key in brandAssets) {
-          if (brandAssets[key].task_id === taskId) {
+          if (
+            brandAssets[key].task_id === taskId &&
+            brandAssets[key].creator_id === creatorId &&
+            brandAssets[key].type === "video"
+          ) {
             brandAssetId = key;
             break;
           }
@@ -47,7 +51,10 @@ const insertCampaignDrafts = async (req, res) => {
 
         let creatorAssetId = null;
         for (const key in creatorAssets) {
-          if (creatorAssets[key].task_id === taskId) {
+          if (
+            creatorAssets[key].task_id === taskId &&
+            creatorAssets[key].type === "video"
+          ) {
             creatorAssetId = key;
             break;
           }
@@ -60,9 +67,7 @@ const insertCampaignDrafts = async (req, res) => {
           await Promise.all([
             firebase
               .database()
-              .ref(
-                `brands/${brandId}/brand_assets/${brandAssetId}/source`,
-              )
+              .ref(`brands/${brandId}/brand_assets/${brandAssetId}/source`)
               .set(s3Link),
             firebase
               .database()
@@ -76,9 +81,7 @@ const insertCampaignDrafts = async (req, res) => {
               .set(s3Link),
             firebase
               .database()
-              .ref(
-                `users/${creatorId}/creator_assets/${creatorAssetId}/source`,
-              )
+              .ref(`users/${creatorId}/creator_assets/${creatorAssetId}/source`)
               .set(s3Link),
           ]);
         } catch (error) {

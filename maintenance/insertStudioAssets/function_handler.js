@@ -45,7 +45,11 @@ const insertCampaignDrafts = async (req, res) => {
 
         let brandAssetId = null;
         for (const key in brandAssets) {
-          if (brandAssets[key].task_id === taskId) {
+          if (
+            brandAssets[key].task_id === taskId &&
+            brandAssets[key].creator_id === creatorId &&
+            brandAssets[key].type === "video"
+          ) {
             brandAssetId = key;
             break;
           }
@@ -53,7 +57,10 @@ const insertCampaignDrafts = async (req, res) => {
 
         let creatorAssetId = null;
         for (const key in creatorAssets) {
-          if (creatorAssets[key].task_id === taskId) {
+          if (
+            creatorAssets[key].task_id === taskId &&
+            creatorAssets[key].type === "video"
+          ) {
             creatorAssetId = key;
             break;
           }
