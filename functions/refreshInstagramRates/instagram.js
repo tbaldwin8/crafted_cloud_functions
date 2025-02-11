@@ -10,10 +10,24 @@ const BATCH_SIZE_MEDIA = 5;  // Adjust this number based on how many concurrent 
 const refreshInstagramRates = async (req, res) => {
   cors(req, res, async () => {
     try {
-      // Fetch all users with their Instagram info
-      const usersSnapshot = await firebase.database().ref('users').once('value');
-      const users = usersSnapshot.val();
-      const userEntries = Object.entries(users);
+      const ids = req.body.ids || [];
+      let usersSnapshot;
+
+      if (ids.length > 0) {
+        const userPromises = ids.map(id => firebase.database().ref(`users/${id}`).once('value'));
+        const userSnapshots = await Promise.all(userPromises);
+        usersSnapshot = userSnapshots.reduce((acc, snap) => {
+          if (snap.exists()) {
+            acc[snap.key] = snap.val();
+          }
+          return acc;
+        }, {});
+      } else {
+        usersSnapshot = await firebase.database().ref('users').once('value');
+        usersSnapshot = usersSnapshot.val();
+      }
+
+      const userEntries = Object.entries(usersSnapshot);
 
       for (let i = 0; i < userEntries.length; i += BATCH_SIZE_USERS) {
         const batch = userEntries.slice(i, i + BATCH_SIZE_USERS);
@@ -50,12 +64,15 @@ const refreshInstagramRates = async (req, res) => {
 
 async function calculateSuggestedRate(access_token, business_account_id) {
   try {
+    console.log("Calculating suggested rate for business_account_id", business_account_id);
+    console.log("Access token", access_token);
     const mediaUrl = `https://graph.facebook.com/v18.0/${business_account_id}/media?fields=media_type&access_token=${access_token}&limit=300`;
     const mediaResponse = await fetch(mediaUrl);
+    const mediaData = await mediaResponse.json();
     if (!mediaResponse.ok) {
+      console.error("mediaData", mediaData);
       throw new Error(`Failed to fetch media data: ${mediaResponse.status} ${mediaResponse.statusText}`);
     }
-    const mediaData = await mediaResponse.json();
     console.log("MEDIA LENGTH", Object.keys(mediaData.data).length);
 
     const reels = mediaData.data
@@ -99,7 +116,7 @@ async function calculateSuggestedRate(access_token, business_account_id) {
 
     return suggestedRate;
   } catch (error) {
-    console.error('Failed to calculate suggested rate:', error);
+    console.error('Failed to calculate suggested rate:', error.message);
     throw error; // Rethrow the error to be caught in the outer try-catch
   }
 }

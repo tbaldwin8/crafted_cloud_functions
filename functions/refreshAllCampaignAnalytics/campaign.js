@@ -17,6 +17,9 @@ const refreshAllCampaignAnalytics = async (req, res) => {
       const campaigns = snapshot.val();
 
       for (const [campaign_id, campaign] of Object.entries(campaigns)) {
+        if(campaign_id !== "-O38UTjz7WRQDA2J1hHw")  {
+          continue;
+        }
         let brand_id = campaign.brand_id;
         let totalViews = 0;
         let totalLikes = 0;
@@ -32,15 +35,16 @@ const refreshAllCampaignAnalytics = async (req, res) => {
         for (const [task_id, task] of Object.entries(tasks)) {
           const task_posts = task.posts;
 
-          console.log("posts: " + posts);
           if (
             task_posts &&
-            Object.keys(task_posts).length > 0 &&
-            campaign.status != "completed"
+            Object.keys(task_posts).length > 0 
           ) {
             posts += Object.entries(task_posts).length || 0;
             hasPosts = true;
             for (const [post_id, task_post] of Object.entries(task_posts)) {
+              if (post_id !== "-OB62IDzwTIl5OSknh5P") {
+                continue;
+              }
               if (task_post.platform === "tiktok") {
                 const video_id =
                   task_post.link &&
@@ -53,6 +57,7 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                   .once("value");
                 const snapshot = await userSnapshotPromise;
                 const accessToken = snapshot.val();
+                console.log("video_id: ", video_id);
                 if (accessToken && video_id) {
                   const new_entry = {
                     video_id: video_id,
@@ -66,7 +71,7 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                 }
               }
 
-              if (hasPosts) {
+              if (false) {
                 if (task_post.platform === "instagram") {
                   const userSnapshotPromise = firebase
                     .database()
@@ -85,10 +90,8 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                       short_link: task_post.short_link,
                       creator_id: task_post.creator_id,
                     };
-                    //console.log("new entry", new_entry);
                     instagram_posts.push(new_entry);
                   } else if (!task_post.media_id) {
-                    //console.log
                     const performanceRef = firebase
                       .database()
                       .ref(
@@ -105,7 +108,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                         creator_id: task_post.creator_id,
                         performance: performanceValue,
                       };
-                      //console.log("new entry", new_entry);
                       instagram_posts.push(new_entry);
                     }
                   }
@@ -115,9 +117,10 @@ const refreshAllCampaignAnalytics = async (req, res) => {
 
             //await Promise.all(promises);
             // 2 - iterate through each object in the array and make a call to TikTok to get the likes, comments, shares, views for that post -> add this to a new array of objects with the video ids as keys
-            console.log("Before for loop: " + totalViews);
-            console.log(tiktok_posts);
             for (const post of tiktok_posts) {
+              if(post.post_id !== "-OB62IDzwTIl5OSknh5P") {
+                continue;
+              }
               let totalClicksForLink = 0;
               let performance_data;
 
@@ -128,7 +131,7 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                   campaign_id,
                   task_id,
                 );
-
+                console.log("tiktok response: ", tiktokResponse);
                 if (tiktokResponse) {
                   performance_data = {
                     likes: tiktokResponse.data.videos[0].like_count,
@@ -163,12 +166,9 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                   totalClicks += performance_data.clicks;
                   totalPosts += 1;
 
-                  console.log("total likes: " + performance_data.likes);
-                  console.log("TikTok: " + totalViews);
                 }
               } catch (error) {
                 // Handle errors
-                console.log("error:" + error);
               }
             }
 
@@ -195,16 +195,15 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                 );
 
                 const responseData = await response.json();
-
+                
+                console.log("tiktok response data: ", responseData);
                 if (!responseData.data.videos.length) {
                   throw new Error(
                     "Failed to fetch from TikTok API. No videos found.",
                   );
                 }
-
                 return responseData;
               } catch (error) {
-                console.log("Error w/ TikTok API: " + error);
                 // Fetch the initial data from Firebase
                 const postsRef = firebase
                   .database()
@@ -214,26 +213,18 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                 const postsSnapshot = await postsRef.once("value");
                 const postsData = postsSnapshot.val();
                 if (postsData) {
-                  console.log(
-                    "TikTok api failed: retrieving data from Firebase",
-                  );
                   // Get the last object that starts with "-"
                   const postKeys = Object.keys(postsData);
-                  console.log("Post data: ", postsData);
                   const lastObjectKey = postKeys
                     .filter((key) => key.startsWith("-"))
                     .sort()
                     .pop();
                   if (lastObjectKey) {
-                    console.log("PostsData taken: ", postsData[lastObjectKey]);
                     // Get the metrics from that object
                     // Create a new analytics object
 
                     if (!isPostValid(postsData)) {
-                      console.log(
-                        "Invalid post data: ",
-                        postsData[lastObjectKey],
-                      );
+                        
                       return null;
                     }
 
@@ -279,7 +270,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
 
               if (response.ok) {
                 const responseData = await response.json();
-                console.log("Bitly Response:", responseData);
                 return responseData.total_clicks;
               } else {
                 console.error(
@@ -332,11 +322,9 @@ const refreshAllCampaignAnalytics = async (req, res) => {
             }
 
             for (const post of instagram_posts) {
-              console.log(post);
               let totalClicksForLink = 0;
               if (post.short_link && post.short_link !== "") {
                 const shortLink = post.short_link.replace("https://", "");
-                console.log("Short Link: ", shortLink);
                 const response = await fetch(
                   `https://api-ssl.bitly.com/v4/bitlinks/${shortLink}/clicks/summary?unit=day&units=-1`,
                   {
@@ -348,7 +336,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
 
                 if (response.ok) {
                   const responseData = await response.json();
-                  console.log("Bitly Response:", responseData);
                   totalClicksForLink = responseData.total_clicks;
 
                   // Update the total clicks for the short_link in the database
@@ -364,14 +351,12 @@ const refreshAllCampaignAnalytics = async (req, res) => {
               if (post.media_id) {
                 try {
                   // MAKE A CALL TO INSTAGRAM API
-                  //  console.log("instagram post info:" + post.media_id);
                   const insightsUrl = `https://graph.facebook.com/v18.0/${post.media_id}/insights?access_token=${post.token}&metric=ig_reels_aggregated_all_plays_count,comments,likes,shares`;
                   const insightsResponse = await fetch(insightsUrl);
                   const insightsData = await insightsResponse.json();
                   if (insightsData.error) {
                     throw new Error(insightsData.error.message);
                   }
-                  //  console.log(insightsData);
                   let performance_data = {};
                   if (insightsData.data && insightsData.data.length > 0) {
                     const plays = insightsData.data[0].values[0].value;
@@ -379,10 +364,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                     const likes = insightsData.data[2].values[0].value;
                     const shares = insightsData.data[3].values[0].value;
 
-                    //  console.log("Plays: ", plays);
-                    //   console.log("Comments: ", comments);
-                    ///  console.log("Likes: ", likes);
-                    //  console.log("Shares: ", shares);
 
                     performance_data = {
                       views: plays,
@@ -393,7 +374,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                       updated: moment().format(),
                     };
                   }
-                  // console.log("performance data", performance_data);
 
                   const performanceRef = firebase
                     .database()
@@ -428,7 +408,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                   const newBrandInfluencerCampaignsRef =
                     brandInfluencerCampaignsRef.push();
                   newBrandInfluencerCampaignsRef.set(performance_data);
-                  //  console.log("total views before IG: " + totalViews);
                   if (Object.keys(performance_data).length === 0) {
                     totalPosts += 1;
                     continue;
@@ -442,7 +421,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                   }
                   // Update your database with performance data
                 } catch (error) {
-                  console.log("error:" + error);
 
                   // Fetch the last added performance object
                   const performanceRef = firebase
@@ -463,7 +441,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                     }
                   });
 
-                  console.log(lastPerformance);
 
                   if (lastPerformance) {
                     // Copy the data over to newPerformanceRef
@@ -487,8 +464,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                   )
                   .once("value");
                 const postValue = postSnapshot.val();
-                console.log("POST WITHOUT MEDIA ID: ", postValue);
-                console.log("PERFORMANCE: ", postValue.performance);
 
                 if (!postValue.performance) {
                   continue;
@@ -516,7 +491,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
                 totalPosts += 1;
               }
             }
-            console.log("After for loop:" + totalViews);
             // 4 - iterate through each object in the post performance array and save the total number of posts, total Views, Likes, Comments, Shares -> write this info under the analytics tab for a campaign
             let campaignUpdate = {
               totalViews,
@@ -561,7 +535,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
               influencerCampaignsAnalyticsRef.push();
             newInfluencerCampaignsAnalyticsRef.set(campaignUpdate);
           } else {
-            console.log("no posts");
           }
         }
       }
