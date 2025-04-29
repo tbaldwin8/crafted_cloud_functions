@@ -351,7 +351,7 @@ const refreshAllCampaignAnalytics = async (req, res) => {
               if (post.media_id) {
                 try {
                   // MAKE A CALL TO INSTAGRAM API
-                  const insightsUrl = `https://graph.facebook.com/v18.0/${post.media_id}/insights?access_token=${post.token}&metric=ig_reels_aggregated_all_plays_count,comments,likes,shares`;
+                  const insightsUrl = `https://graph.facebook.com/v20.0/${post.media_id}/insights?access_token=${post.token}&metric=reach,comments,likes,shares`;
                   const insightsResponse = await fetch(insightsUrl);
                   const insightsData = await insightsResponse.json();
                   if (insightsData.error) {

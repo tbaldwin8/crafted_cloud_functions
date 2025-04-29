@@ -10,16 +10,19 @@ const cors = require("cors")({ origin: true });
 
 const refreshTiktokRatesForAllAccounts = (req, res) => {
   cors(req, res, async () => {
-    const ids = req.body.ids;
     const usersRef = firebase.database().ref("users");
-
-    if (ids && Array.isArray(ids) && ids.length > 0) {
-      const promises = ids.map((userId) => usersRef.child(userId).once("value"));
-      try {
-        const snapshots = await Promise.all(promises);
-        snapshots.forEach((userSnapshot) => {
+    usersRef
+      .orderByChild("creator_socials/tiktok/performance/suggestedRate")
+      .startAt(null)
+      .once("value")
+      .then((snapshot) => {
+        snapshot.forEach((userSnapshot) => {
           const userId = userSnapshot.key;
-          const tikTokInfo = true
+          //console.log(userId);
+          const tikTokInfo = userSnapshot
+            .child("creator_socials/tiktok/performance/suggestedRate")
+            .val();
+
           if (tikTokInfo) {
             try {
               getSuggestedRateTikTok(userId);
@@ -31,47 +34,15 @@ const refreshTiktokRatesForAllAccounts = (req, res) => {
             }
           }
         });
-        console.log("Suggested rates updated successfully");
+        console.log("Suggested rates updated succesfully");
         res
           .status(200)
-          .json({ message: "Suggested rates updated successfully" });
-      } catch (error) {
+          .json({ message: "Suggested rates updated succesfully" });
+      })
+      .catch((error) => {
         console.error("Error fetching users:", error);
         res.status(500).json({ message: "Error updating suggested rates" });
-      }
-    } else {
-      usersRef
-        .orderByChild("creator_socials/tiktok/performance/suggestedRate")
-        .startAt(null)
-        .once("value")
-        .then((snapshot) => {
-          snapshot.forEach((userSnapshot) => {
-            const userId = userSnapshot.key;
-            const tikTokInfo = userSnapshot
-              .child("creator_socials/tiktok/performance/suggestedRate")
-              .val();
-
-            if (tikTokInfo) {
-              try {
-                getSuggestedRateTikTok(userId);
-              } catch (error) {
-                console.error(
-                  "Error fetching and calculating video data:",
-                  error,
-                );
-              }
-            }
-          });
-          console.log("Suggested rates updated succesfully");
-          res
-            .status(200)
-            .json({ message: "Suggested rates updated succesfully" });
-        })
-        .catch((error) => {
-          console.error("Error fetching users:", error);
-          res.status(500).json({ message: "Error updating suggested rates" });
-        });
-    }
+      });
   });
 };
 
@@ -179,7 +150,15 @@ const getSuggestedRateTikTok = async (userId) => {
     console.log("avg10_comments: " + median_comments);
     console.log("followerCount by 1000: " + followerCount / 1000);
     const updated = moment().format();
+
     // Store data in Firebase
+    if (!suggestedRate) {
+      console.error(
+        `Failed to calculate a suggested rate for creator ${creator_id}`,
+      );
+      return null;
+    }
+
     await firebase
       .database()
       .ref(`users/${creator_id}/creator_socials/tiktok/performance`)

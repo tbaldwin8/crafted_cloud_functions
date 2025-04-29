@@ -1,50 +1,60 @@
-require('dotenv').config();
-const axios = require('axios');
+require("dotenv").config();
+const axios = require("axios");
 const firebase = require(process.env.PRODEV);
-const cors = require('cors')({ origin: true });
-const moment = require('moment');
+const cors = require("cors")({ origin: true });
+const moment = require("moment");
 
 const BATCH_SIZE_USERS = 5; // Adjust this number based on how many concurrent requests you want for users
-const BATCH_SIZE_MEDIA = 5;  // Adjust this number based on how many concurrent requests you want for media IDs
+const BATCH_SIZE_MEDIA = 5; // Adjust this number based on how many concurrent requests you want for media IDs
 
 const refreshInstagramRates = async (req, res) => {
   cors(req, res, async () => {
     try {
-      const ids = req.body.ids || [];
-      let usersSnapshot;
-
-      if (ids.length > 0) {
-        const userPromises = ids.map(id => firebase.database().ref(`users/${id}`).once('value'));
-        const userSnapshots = await Promise.all(userPromises);
-        usersSnapshot = userSnapshots.reduce((acc, snap) => {
-          if (snap.exists()) {
-            acc[snap.key] = snap.val();
-          }
-          return acc;
-        }, {});
-      } else {
-        usersSnapshot = await firebase.database().ref('users').once('value');
-        usersSnapshot = usersSnapshot.val();
-      }
-
-      const userEntries = Object.entries(usersSnapshot);
+      // Fetch all users with their Instagram info
+      const usersSnapshot = await firebase
+        .database()
+        .ref("users")
+        .once("value");
+      const users = usersSnapshot.val();
+      const userEntries = Object.entries(users);
 
       for (let i = 0; i < userEntries.length; i += BATCH_SIZE_USERS) {
         const batch = userEntries.slice(i, i + BATCH_SIZE_USERS);
 
         const updatePromises = batch.map(async ([creator_id, user]) => {
-          const instagramInfo = user && user.creator_socials && user.creator_socials.instagram;
-          if (instagramInfo && instagramInfo.instagram_business_account_id && instagramInfo.access_token) {
+          const instagramInfo =
+            user && user.creator_socials && user.creator_socials.instagram;
+          if (
+            instagramInfo &&
+            instagramInfo.instagram_business_account_id &&
+            instagramInfo.access_token
+          ) {
             try {
-              const suggestedRate = await calculateSuggestedRate(instagramInfo.access_token, instagramInfo.instagram_business_account_id);
+              const suggestedRate = await calculateSuggestedRate(
+                instagramInfo.access_token,
+                instagramInfo.instagram_business_account_id,
+              );
 
               // Set the new data in the respective creator's creator_socials.instagram
-              await firebase.database().ref(`users/${creator_id}/creator_socials/instagram`).update({
-                suggested_rate: suggestedRate,
-                updated: moment().format()
-              });
+              if (!suggestedRate) {
+                console.error(
+                  `Failed to calculate a suggested rate for creator ${creator_id}`,
+                );
+                return null;
+              }
+
+              await firebase
+                .database()
+                .ref(`users/${creator_id}/creator_socials/instagram`)
+                .update({
+                  suggested_rate: suggestedRate,
+                  updated: moment().format(),
+                });
             } catch (error) {
-              console.error(`Failed to calculate or update suggested rate for creator_id ${creator_id}:`, error);
+              console.error(
+                `Failed to calculate or update suggested rate for creator_id ${creator_id}:`,
+                error,
+              );
               return;
             }
           }
@@ -54,9 +64,13 @@ const refreshInstagramRates = async (req, res) => {
         await Promise.all(updatePromises);
       }
 
-      res.status(200).json({ status: "200", statuscode: "1", message: "Refreshed all Instagram accounts successfully" });
+      res.status(200).json({
+        status: "200",
+        statuscode: "1",
+        message: "Refreshed all Instagram accounts successfully",
+      });
     } catch (error) {
-      console.error('Error refreshing Instagram accounts:', error);
+      console.error("Error refreshing Instagram accounts:", error);
       res.status(500).json({ status: "500", statuscode: "-1", result: error });
     }
   });
@@ -64,22 +78,21 @@ const refreshInstagramRates = async (req, res) => {
 
 async function calculateSuggestedRate(access_token, business_account_id) {
   try {
-    console.log("Calculating suggested rate for business_account_id", business_account_id);
-    console.log("Access token", access_token);
-    const mediaUrl = `https://graph.facebook.com/v18.0/${business_account_id}/media?fields=media_type&access_token=${access_token}&limit=300`;
+    const mediaUrl = `https://graph.facebook.com/v20.0/${business_account_id}/media?fields=media_type&access_token=${access_token}&limit=300`;
     const mediaResponse = await fetch(mediaUrl);
-    const mediaData = await mediaResponse.json();
     if (!mediaResponse.ok) {
-      console.error("mediaData", mediaData);
-      throw new Error(`Failed to fetch media data: ${mediaResponse.status} ${mediaResponse.statusText}`);
+      throw new Error(
+        `Failed to fetch media data: ${mediaResponse.status} ${mediaResponse.statusText}`,
+      );
     }
+    const mediaData = await mediaResponse.json();
     console.log("MEDIA LENGTH", Object.keys(mediaData.data).length);
 
     const reels = mediaData.data
-      .filter(media => media.media_type === 'VIDEO')
+      .filter((media) => media.media_type === "VIDEO")
       .slice(0, 25);
 
-    const mediaIds = reels.map(media => media.id);
+    const mediaIds = reels.map((media) => media.id);
 
     // Batch the media ID requests
     let allPlayCounts = [];
@@ -88,10 +101,12 @@ async function calculateSuggestedRate(access_token, business_account_id) {
 
       const playPromises = mediaBatch.map(async (mediaId) => {
         try {
-          const insightsUrl = `https://graph.facebook.com/v18.0/${mediaId}/insights?access_token=${access_token}&metric=ig_reels_aggregated_all_plays_count`;
+          const insightsUrl = `https://graph.facebook.com/v20.0/${mediaId}/insights?access_token=${access_token}&metric=reach`;
           const insightsResponse = await fetch(insightsUrl);
           if (!insightsResponse.ok) {
-            throw new Error(`Failed to fetch insights for mediaId ${mediaId}: ${insightsResponse.status} ${insightsResponse.statusText}`);
+            throw new Error(
+              `Failed to fetch insights for mediaId ${mediaId}: ${insightsResponse.status} ${insightsResponse.statusText}`,
+            );
           }
           const insightsData = await insightsResponse.json();
 
@@ -100,13 +115,18 @@ async function calculateSuggestedRate(access_token, business_account_id) {
           }
           return null;
         } catch (error) {
-          console.error(`Error fetching insights for mediaId ${mediaId}:`, error);
+          console.error(
+            `Error fetching insights for mediaId ${mediaId}:`,
+            error,
+          );
           return null;
         }
       });
 
       const playArray = await Promise.all(playPromises);
-      allPlayCounts = allPlayCounts.concat(playArray.filter(play => play !== null)); // Accumulate valid play counts
+      allPlayCounts = allPlayCounts.concat(
+        playArray.filter((play) => play !== null),
+      ); // Accumulate valid play counts
     }
 
     // Calculate median and suggested rate
@@ -116,7 +136,7 @@ async function calculateSuggestedRate(access_token, business_account_id) {
 
     return suggestedRate;
   } catch (error) {
-    console.error('Failed to calculate suggested rate:', error.message);
+    console.error("Failed to calculate suggested rate:", error);
     throw error; // Rethrow the error to be caught in the outer try-catch
   }
 }
