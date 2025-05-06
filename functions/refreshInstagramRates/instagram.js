@@ -101,7 +101,7 @@ async function calculateSuggestedRate(access_token, business_account_id) {
 
       const playPromises = mediaBatch.map(async (mediaId) => {
         try {
-          const insightsUrl = `https://graph.facebook.com/v20.0/${mediaId}/insights?access_token=${access_token}&metric=reach`;
+          const insightsUrl = `https://graph.facebook.com/v20.0/${mediaId}/insights?access_token=${access_token}&metric=views`;
           const insightsResponse = await fetch(insightsUrl);
           if (!insightsResponse.ok) {
             throw new Error(
