@@ -11,9 +11,18 @@ const insertCampaignProposalsDemographics = async (req, res) => {
 
   cors(req, res, async () => {
     for (const campaignId in campaigns) {
-      const { tasks, brand_id: brandId } = campaigns[campaignId];
+      const { tasks, brand_id: brandId, status } = campaigns[campaignId];
+
+      if (status === "completed") {
+        console.log("\n\nCampaign is completed, skipping...");
+        console.log("Campaign: ", campaignId);
+        console.log("Brand: ", brandId);
+        console.log("Status: ", status);
+        continue;
+      }
 
       for (const taskId in tasks) {
+        console.log(`\nProcessing campaign: ${campaignId}\n`);
         console.log("Task: ", taskId);
         const { proposals } = tasks[taskId];
         for (const proposalId in proposals) {
@@ -27,36 +36,39 @@ const insertCampaignProposalsDemographics = async (req, res) => {
           if (snapshot.val()) {
             const user = snapshot.val();
 
-            const { demographics } = user?.creator_socials?.instagram;
+            const demographics =
+              user?.creator_socials?.instagram?.demographics || null;
 
-            await Promise.all([
-              firebase
-                .database()
-                .ref(
-                  `influencer_campaigns/${campaignId}/tasks/${taskId}/proposals/${proposalId}/creator_socials/instagram/demographics`,
-                )
-                .set(demographics),
-              firebase
-                .database()
-                .ref(
-                  `users/${creatorId}/influencer_tasks/${taskId}/proposals/${proposalId}/creator_socials/instagram/demographics`,
-                )
-                .set(demographics),
-              firebase
-                .database()
-                .ref(
-                  `brands/${brandId}/influencer_campaigns/${campaignId}/tasks/${taskId}/proposals/${proposalId}/creator_socials/instagram/demographics`,
-                )
-                .set(demographics),
-              firebase
-                .database()
-                .ref(
-                  `influencer_tasks/${taskId}/proposals/${proposalId}/creator_socials/instagram/demographics`,
-                )
-                .set(demographics),
-            ]);
+            if (demographics) {
+              await Promise.all([
+                firebase
+                  .database()
+                  .ref(
+                    `influencer_campaigns/${campaignId}/tasks/${taskId}/proposals/${proposalId}/creator_socials/instagram/demographics`,
+                  )
+                  .set(demographics),
+                firebase
+                  .database()
+                  .ref(
+                    `users/${creatorId}/influencer_tasks/${taskId}/proposals/${proposalId}/creator_socials/instagram/demographics`,
+                  )
+                  .set(demographics),
+                firebase
+                  .database()
+                  .ref(
+                    `brands/${brandId}/influencer_campaigns/${campaignId}/tasks/${taskId}/proposals/${proposalId}/creator_socials/instagram/demographics`,
+                  )
+                  .set(demographics),
+                firebase
+                  .database()
+                  .ref(
+                    `influencer_tasks/${taskId}/proposals/${proposalId}/creator_socials/instagram/demographics`,
+                  )
+                  .set(demographics),
+              ]);
 
-            console.log(`Proposal ${proposalId} updated successfully`);
+              console.log(`Proposal ${proposalId} updated successfully`);
+            }
           }
         }
       }
