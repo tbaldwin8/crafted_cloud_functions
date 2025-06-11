@@ -27,10 +27,12 @@ const findCreatorsForStudioBrief = async (req, res) => {
         }
         const usersSnapshot = await query.once("value");
         const users = usersSnapshot.val();
-
-        if (!users) break;
-
         const userKeys = Object.keys(users);
+
+        if (!users || userKeys.length === 0) {
+          break;
+        }
+
         lastKey = userKeys[userKeys.length - 1];
         if (userKeys.length < batchSize) {
           moreUsers = false;
@@ -40,10 +42,13 @@ const findCreatorsForStudioBrief = async (req, res) => {
           // Check if the user has the creator_tasks property
           if (user && user.creator_tasks) {
             const userState =
-              user.shipping_details && user.shipping_details.state && user.shipping_details.state.toUpperCase();
+              user.shipping_details &&
+              user.shipping_details.state &&
+              user.shipping_details.state.toUpperCase();
             const userCountry =
               user.shipping_details &&
-              user.shipping_details.country && user.shipping_details.country.toUpperCase();
+              user.shipping_details.country &&
+              user.shipping_details.country.toUpperCase();
 
             // Check if the user's state or country matches the task regions
             const isRegionMatch =
@@ -75,7 +80,10 @@ const findCreatorsForStudioBrief = async (req, res) => {
 
       console.log("Blast Results: ", blastResults);
 
-      await updateCampaignInviteResults({taskId: task.uid, payload: blastResults})
+      await updateCampaignInviteResults({
+        taskId: task.uid,
+        payload: blastResults,
+      });
 
       return res.status(200).json({
         status: "200",
