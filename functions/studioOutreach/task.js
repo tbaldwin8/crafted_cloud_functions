@@ -10,39 +10,65 @@ const findCreatorsForStudioBrief = async (req, res) => {
       let matchingCreators = [];
 
       console.log("req body", req.body);
-      let usersRef = await firebase.database().ref("users").once("value");
-      let users = usersRef.val();
 
       // Get the regions from the task in the request body
       const taskRegions = task.regions.map((region) => region.value);
       console.log("taskRegions", taskRegions);
-      Object.entries(users).forEach(([key, user]) => {
-        // Check if the user has the creator_tasks property
-        if (user && user.creator_tasks) {
-          const userState =
-            user.shipping_details && user.shipping_details.state.toUpperCase();
-          const userCountry =
-            user.shipping_details &&
-            user.shipping_details.country.toUpperCase();
 
-          // Check if the user's state or country matches the task regions
-          const isRegionMatch =
-            (taskRegions.includes("USA") && userCountry === "USA") ||
-            (taskRegions.includes("CAN") && userCountry === "CAN") ||
-            taskRegions.includes(userState);
+      const usersRef = firebase.database().ref("users");
+      let lastKey = null;
+      const batchSize = 100; // Adjust as needed
 
-          if (isRegionMatch) {
-            // If the user's state or country matches a task region, add the user to the list
-            const userSummary = {
-              email: user.email || user.paypail_email,
-              id: key,
-              shipping_details: user.shipping_details,
-            };
-
-            matchingCreators.push(userSummary);
-          }
+      let moreUsers = true;
+      while (moreUsers) {
+        let query = usersRef.orderByKey().limitToFirst(batchSize);
+        if (lastKey) {
+          query = query.startAfter(lastKey);
         }
-      });
+        const usersSnapshot = await query.once("value");
+        const users = usersSnapshot.val();
+        const userKeys = Object.keys(users);
+
+        if (!users || userKeys.length === 0) {
+          break;
+        }
+
+        lastKey = userKeys[userKeys.length - 1];
+        if (userKeys.length < batchSize) {
+          moreUsers = false;
+        }
+
+        Object.entries(users).forEach(([key, user]) => {
+          // Check if the user has the creator_tasks property
+          if (user && user.creator_tasks) {
+            const userState =
+              user.shipping_details &&
+              user.shipping_details.state &&
+              user.shipping_details.state.toUpperCase();
+            const userCountry =
+              user.shipping_details &&
+              user.shipping_details.country &&
+              user.shipping_details.country.toUpperCase();
+
+            // Check if the user's state or country matches the task regions
+            const isRegionMatch =
+              (taskRegions.includes("USA") && userCountry === "USA") ||
+              (taskRegions.includes("CAN") && userCountry === "CAN") ||
+              (userState && taskRegions.includes(userState));
+
+            if (isRegionMatch) {
+              // If the user's state or country matches a task region, add the user to the list
+              const userSummary = {
+                email: user.email || user.paypail_email,
+                id: key,
+                shipping_details: user.shipping_details,
+              };
+
+              matchingCreators.push(userSummary);
+            }
+          }
+        });
+      }
 
       const blastResults = await email.inviteCreators(
         matchingCreators,
@@ -54,7 +80,10 @@ const findCreatorsForStudioBrief = async (req, res) => {
 
       console.log("Blast Results: ", blastResults);
 
-      await updateCampaignInviteResults({taskId: task.uid, payload: blastResults})
+      await updateCampaignInviteResults({
+        taskId: task.uid,
+        payload: blastResults,
+      });
 
       return res.status(200).json({
         status: "200",
