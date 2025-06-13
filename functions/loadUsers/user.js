@@ -13,34 +13,53 @@ const loadUsersInBatches = async (req, res) => {
       const usersRef = firebase.database().ref('users');
 
       if (query && query.trim() !== "") {
-        // Fetch all users, filter, then paginate
-        const snapshot = await usersRef.once('value');
-        const allUsers = snapshot.val() || {};
-        const filtered = Object.entries(allUsers).map(([key, userData]) => ({
-          key,
-          data: {
-            name: userData.name || null,
-            email: userData.email,
-            bio: userData.bio,
-            creator_socials: userData.creator_socials,
-            avatar: userData.avatar,
-            shipping_details: {
-              address1: userData.shipping_details && userData.shipping_details.address_1 ? userData.shipping_details.address_1 : null,
-              address2: userData.shipping_details && userData.shipping_details.address_2 ? userData.shipping_details.address_2 : null,
-              fullname: userData.shipping_details && userData.shipping_details.fullname ? userData.shipping_details.fullname : null,
-              city: userData.shipping_details && userData.shipping_details.city ? userData.shipping_details.city : null,
-              state: userData.shipping_details && userData.shipping_details.state ? userData.shipping_details.state : null,
-              zipcode: userData.shipping_details && userData.shipping_details.zipcode ? userData.shipping_details.zipcode : null,
-            }
+        // Fetch users in batches, filter, and paginate
+        const q = query.toLowerCase();
+        let filtered = [];
+        let lastKey = null;
+        const batchSize = 500; // Adjust as needed for memory/performance
+        let moreUsers = true;
+
+        while (moreUsers && filtered.length < (parseInt(pageToken ? pageSize + 1 : pageSize, 10))) {
+          let fbQuery = usersRef.orderByKey().limitToFirst(batchSize);
+          if (lastKey) {
+            fbQuery = fbQuery.startAfter(lastKey);
           }
-        })).filter(userData => {
-          const q = query.toLowerCase();
-          return (
-            (userData.data && userData.data.shipping_details && userData.data.shipping_details.fullname && userData.data.shipping_details.fullname.toLowerCase().includes(q)) ||
-            (userData.data && userData.data.email && userData.data.email.toLowerCase().includes(q)) ||
-            (userData.data && userData.data.name && userData.data.name.toLowerCase().includes(q))
-          );
-        });
+          const snapshot = await fbQuery.once('value');
+          const usersBatch = snapshot.val();
+          if (!usersBatch) break;
+          const userKeys = Object.keys(usersBatch);
+          if (userKeys.length < batchSize) moreUsers = false;
+          lastKey = userKeys[userKeys.length - 1];
+
+          // Filter first, then map
+          const batchFiltered = Object.entries(usersBatch)
+            .filter(([_, userData]) =>
+              (userData.shipping_details && userData.shipping_details.fullname && userData.shipping_details.fullname.toLowerCase().includes(q)) ||
+              (userData.email && userData.email.toLowerCase().includes(q)) ||
+              (userData.name && userData.name.toLowerCase().includes(q))
+            )
+            .map(([key, userData]) => ({
+              key,
+              data: {
+                name: userData.name || null,
+                email: userData.email,
+                bio: userData.bio,
+                creator_socials: userData.creator_socials,
+                avatar: userData.avatar,
+                shipping_details: {
+                  address1: userData.shipping_details && userData.shipping_details.address_1 ? userData.shipping_details.address_1 : null,
+                  address2: userData.shipping_details && userData.shipping_details.address_2 ? userData.shipping_details.address_2 : null,
+                  fullname: userData.shipping_details && userData.shipping_details.fullname ? userData.shipping_details.fullname : null,
+                  city: userData.shipping_details && userData.shipping_details.city ? userData.shipping_details.city : null,
+                  state: userData.shipping_details && userData.shipping_details.state ? userData.shipping_details.state : null,
+                  zipcode: userData.shipping_details && userData.shipping_details.zipcode ? userData.shipping_details.zipcode : null,
+                }
+              }
+            }));
+
+          filtered = filtered.concat(batchFiltered);
+        }
 
         // Pagination on filtered results
         let startIdx = 0;
