@@ -81,7 +81,7 @@ const loadUsersInBatches = async (req, res) => {
       // Batched fetch if no query
       let fbQuery = usersRef.orderByKey().limitToFirst(pageSize + 1);
       if (pageToken) {
-        fbQuery = fbQuery.startAfter(pageToken);
+        fbQuery = fbQuery.startAt(pageToken);
       }
       const snapshot = await fbQuery.once('value');
       const batchUsers = snapshot.val();
