@@ -5,9 +5,9 @@ const moment = require('moment');
 
 const loadUsersInBatches = async (req, res) => { 
   cors(req, res, async () => {
-    let { query, pageSize, pageToken } = req.query;
+    let { query, pageSize, nextCursor } = req.query;
     pageSize = parseInt(pageSize, 10) || 100; // Default batch size
-    console.log("query", query, "pageSize", pageSize, "pageToken", pageToken);
+    console.log("query", query, "pageSize", pageSize, "nextCursor", nextCursor);
 
     try {
       const usersRef = firebase.database().ref('users');
@@ -20,7 +20,7 @@ const loadUsersInBatches = async (req, res) => {
         const batchSize = 500; // Adjust as needed for memory/performance
         let moreUsers = true;
 
-        while (moreUsers && filtered.length < (parseInt(pageToken ? pageSize + 1 : pageSize, 10))) {
+        while (moreUsers && filtered.length < (parseInt(nextCursor ? pageSize + 1 : pageSize, 10))) {
           let fbQuery = usersRef.orderByKey().limitToFirst(batchSize);
           if (lastKey) {
             fbQuery = fbQuery.startAfter(lastKey);
@@ -63,8 +63,8 @@ const loadUsersInBatches = async (req, res) => {
 
         // Pagination on filtered results
         let startIdx = 0;
-        if (pageToken) {
-          startIdx = filtered.findIndex(u => u.key === pageToken) + 1;
+        if (nextCursor) {
+          startIdx = filtered.findIndex(u => u.key === nextCursor) + 1;
         }
         const paged = filtered.slice(startIdx, startIdx + pageSize);
         const cursor = (startIdx + pageSize) < filtered.length ? paged[paged.length - 1]?.key : null;
@@ -80,8 +80,8 @@ const loadUsersInBatches = async (req, res) => {
 
       // Batched fetch if no query
       let fbQuery = usersRef.orderByKey().limitToFirst(pageSize + 1);
-      if (pageToken) {
-        fbQuery = fbQuery.startAt(pageToken);
+      if (nextCursor) {
+        fbQuery = fbQuery.startAt(nextCursor);
       }
       const snapshot = await fbQuery.once('value');
       const batchUsers = snapshot.val();
