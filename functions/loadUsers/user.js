@@ -67,14 +67,14 @@ const loadUsersInBatches = async (req, res) => {
           startIdx = filtered.findIndex(u => u.key === pageToken) + 1;
         }
         const paged = filtered.slice(startIdx, startIdx + pageSize);
-        const nextPageToken = (startIdx + pageSize) < filtered.length ? paged[paged.length - 1]?.key : null;
+        const cursor = (startIdx + pageSize) < filtered.length ? paged[paged.length - 1]?.key : null;
 
         return res.send({
           status: 200,
           statuscode: "1",
           result: paged,
           length: paged.length,
-          nextPageToken
+          cursor
         });
       }
 
@@ -86,15 +86,15 @@ const loadUsersInBatches = async (req, res) => {
       const snapshot = await fbQuery.once('value');
       const batchUsers = snapshot.val();
       if (!batchUsers) {
-        return res.send({ status: 200, statuscode: "1", result: [], length: 0, nextPageToken: null });
+        return res.send({ status: 200, statuscode: "1", result: [], length: 0, cursor: null });
       }
       const userKeys = Object.keys(batchUsers);
 
-      let nextPageToken = null;
+      let cursor = null;
       let keysToReturn = userKeys;
       if (userKeys.length > pageSize) {
-        // More users exist, set nextPageToken and trim the last user
-        nextPageToken = userKeys[pageSize];
+        // More users exist, set cursor and trim the last user
+        cursor = userKeys[pageSize];
         keysToReturn = userKeys.slice(0, pageSize);
       }
 
@@ -127,7 +127,7 @@ const loadUsersInBatches = async (req, res) => {
         statuscode: "1", 
         result: users, 
         length: users.length, 
-        nextPageToken 
+        cursor 
       });
     } catch (error) {
       console.error('Error loading users:', error);
