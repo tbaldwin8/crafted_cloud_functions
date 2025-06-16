@@ -5,9 +5,9 @@ const moment = require('moment');
 
 const loadUsersInBatches = async (req, res) => { 
   cors(req, res, async () => {
-    let { query, pageSize, nextCursor } = req.query;
+    let { query, pageSize, cursor } = req.query;
     pageSize = parseInt(pageSize, 10) || 100; // Default batch size
-    console.log("query", query, "pageSize", pageSize, "nextCursor", nextCursor);
+    console.log("query", query, "pageSize", pageSize, "cursor", cursor);
 
     try {
       const usersRef = firebase.database().ref('users');
@@ -20,7 +20,7 @@ const loadUsersInBatches = async (req, res) => {
         const batchSize = 500; // Adjust as needed for memory/performance
         let moreUsers = true;
 
-        while (moreUsers && filtered.length < (parseInt(nextCursor ? pageSize + 1 : pageSize, 10))) {
+        while (moreUsers && filtered.length < (parseInt(cursor ? pageSize + 1 : pageSize, 10))) {
           let fbQuery = usersRef.orderByKey().limitToFirst(batchSize);
           if (lastKey) {
             fbQuery = fbQuery.startAfter(lastKey);
@@ -63,38 +63,38 @@ const loadUsersInBatches = async (req, res) => {
 
         // Pagination on filtered results
         let startIdx = 0;
-        if (nextCursor) {
-          startIdx = filtered.findIndex(u => u.key === nextCursor) + 1;
+        if (cursor) {
+          startIdx = filtered.findIndex(u => u.key === cursor) + 1;
         }
         const paged = filtered.slice(startIdx, startIdx + pageSize);
-        const cursor = (startIdx + pageSize) < filtered.length ? paged[paged.length - 1]?.key : null;
+        const nextCursor = (startIdx + pageSize) < filtered.length ? paged[paged.length - 1]?.key : null;
 
         return res.send({
           status: 200,
           statuscode: "1",
           result: paged,
           length: paged.length,
-          cursor
+          next_cursor: nextCursor
         });
       }
 
       // Batched fetch if no query
       let fbQuery = usersRef.orderByKey().limitToFirst(pageSize + 1);
-      if (nextCursor) {
-        fbQuery = fbQuery.startAt(nextCursor);
+      if (cursor) {
+        fbQuery = fbQuery.startAt(cursor);
       }
       const snapshot = await fbQuery.once('value');
       const batchUsers = snapshot.val();
       if (!batchUsers) {
-        return res.send({ status: 200, statuscode: "1", result: [], length: 0, cursor: null });
+        return res.send({ status: 200, statuscode: "1", result: [], length: 0, nextCursor: null });
       }
       const userKeys = Object.keys(batchUsers);
 
-      let cursor = null;
+      let nextCursor = null;
       let keysToReturn = userKeys;
       if (userKeys.length > pageSize) {
-        // More users exist, set cursor and trim the last user
-        cursor = userKeys[pageSize];
+        // More users exist, set nextCursor and trim the last user
+        nextCursor = userKeys[pageSize];
         keysToReturn = userKeys.slice(0, pageSize);
       }
 
@@ -127,7 +127,7 @@ const loadUsersInBatches = async (req, res) => {
         statuscode: "1", 
         result: users, 
         length: users.length, 
-        cursor 
+        next_cursor: nextCursor 
       });
     } catch (error) {
       console.error('Error loading users:', error);
