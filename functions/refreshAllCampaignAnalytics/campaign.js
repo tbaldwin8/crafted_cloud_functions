@@ -1,44 +1,58 @@
 require("dotenv").config();
 const firebase = require(process.env.PRODEV);
 const moment = require("moment");
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const cors = require("cors")({ origin: true });
-const {
-  fetchCampaignBatch,
-  processCampaignAnalytics,
-  getCampaignIds,
-} = require("./utils");
+const { processCampaignAnalytics } = require("./utils");
 
 const BATCH_SIZE = 10;
 
 const refreshAllCampaignAnalytics = async (req, res) => {
   cors(req, res, async () => {
     try {
+      const campaignsRef = firebase.database().ref("influencer_campaigns");
+
       let curDate = moment().format();
+      let lastKey = null;
+      let moreCampaigns = true;
+      let batchCount = 0;
 
-      // Get all campaign IDs first
-      const campaignIds = await getCampaignIds(firebase);
-      console.log(`[INFO] Found ${campaignIds.length} campaigns to process.`);
+      while (moreCampaigns) {
+        let query = campaignsRef.orderByKey().limitToFirst(BATCH_SIZE);
 
-      for (let i = 0; i < campaignIds.length; i += BATCH_SIZE) {
-        const batchIds = campaignIds.slice(i, i + BATCH_SIZE);
+        if (lastKey) {
+          query = query.startAfter(lastKey);
+        }
+
+        const snapshot = await query.once("value");
+        const campaigns = snapshot.val() || {};
+        const campaignKeys = Object.keys(campaigns);
+
+        if (campaignKeys.length === 0) {
+          break;
+        }
+
+        lastKey = campaignKeys[campaignKeys.length - 1];
+
+        if (campaignKeys.length < BATCH_SIZE) {
+          moreCampaigns = false;
+        }
+
+        batchCount++;
+
         console.log(
-          `[INFO] Processing batch ${i / BATCH_SIZE + 1}: ${batchIds.join(", ")}`,
+          `[INFO] Processing batch ${batchCount}: ${campaignKeys.join(", ")}`,
         );
 
-        // Fetch only the batch of campaigns
-        const campaigns = await fetchCampaignBatch(firebase, batchIds);
-
         for (const [campaign_id, campaign] of Object.entries(campaigns)) {
-          if (!campaign) {
-            console.warn(`[WARN] Campaign ${campaign_id} not found or is null.`);
+          if (!campaign || Object.keys(campaign).length === 0) {
+            console.warn(
+              `[WARN] Campaign ${campaign_id} not found or is null.`,
+            );
             continue;
           }
           try {
             await processCampaignAnalytics({
               firebase,
-              fetch,
               moment,
               campaign_id,
               campaign,
@@ -55,7 +69,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
           }
         }
       }
-
       res.status(200).json({
         statuscode: 200,
         message: "Successfully updated campaign analytics",
