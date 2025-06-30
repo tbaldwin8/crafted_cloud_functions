@@ -7,14 +7,8 @@ const cors = require("cors")({ origin: true });
 /**
  * Processes analytics for a single campaign.
  */
-async function processCampaignAnalytics({
-  firebase,
-  moment,
-  campaign_id,
-  campaign,
-  curDate,
-}) {
-  let brand_id = campaign.brand_id;
+async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
+  let { brand_id } = campaign;
   let totalViews = 0;
   let totalLikes = 0;
   let totalComments = 0;
@@ -24,7 +18,7 @@ async function processCampaignAnalytics({
   let totalClicks = 0;
   const tiktok_posts = [];
   const instagram_posts = [];
-  const tasks = campaign.tasks;
+  const { tasks } = campaign;
 
   if (campaign.status === "completed") {
     console.warn(
@@ -33,7 +27,7 @@ async function processCampaignAnalytics({
     return;
   }
 
-  if (Object.keys(tasks).length === 0) {
+  if (!tasks || Object.keys(tasks).length === 0) {
     console.warn(`[WARN] No tasks found for campaign ${campaign_id}`);
     return;
   }
@@ -116,34 +110,25 @@ async function processCampaignAnalytics({
     for (const post of tiktok_posts) {
       try {
         // Make call to TikTok API
-        const tiktokResponse = await fetchTikTokData(
+        const performance_data = await fetchTikTokData(
           post,
           campaign_id,
           task_id,
         );
 
-        if (!tiktokResponse || Object.keys(tiktokResponse).length === 0) {
+        if (!performance_data || Object.keys(performance_data).length === 0) {
           console.warn(
             `[WARN] No TikTok data found for post ID: ${post.post_id} in campaign ${campaign_id}`,
           );
           continue;
         }
-        console.log("[INFO] TikTok post data: ", tiktokResponse);
-
-        // Prepare performance data
-        const performance_data = {
-          likes: tiktokResponse.likes,
-          comments: tiktokResponse.comments,
-          shares: tiktokResponse.shares,
-          views: tiktokResponse.views,
-          date: moment().format(),
-        };
+        console.log("[INFO] TikTok post data: ", performance_data);
 
         // Make call to Bitly API
         if (post.short_link && post.short_link !== "") {
           const totalClicksForLink = await fetchBitlyData(post);
           performance_data.clicks =
-            totalClicksForLink || tiktokResponse.clicks || 0;
+            totalClicksForLink || performance_data.clicks || 0;
         }
 
         // Update your database with performance data
@@ -173,167 +158,40 @@ async function processCampaignAnalytics({
     for (const post of instagram_posts) {
       let totalClicksForLink = 0;
       if (post.short_link && post.short_link !== "") {
-        const shortLink = post.short_link.replace("https://", "");
-        try {
-          const response = await axios.get(
-            `https://api-ssl.bitly.com/v4/bitlinks/${shortLink}/clicks/summary?unit=day&units=-1`,
-            {
-              headers: {
-                Authorization: `Bearer ${process.env.BITLY_ACCESS_TOKEN}`,
-              },
-            },
-          );
-          totalClicksForLink = response.data.total_clicks;
-        } catch (error) {
-          if (error.response) {
-            console.error(
-              "Failed to get data from Bitly API",
-              error.response.status,
-              error.response.statusText,
-            );
-          } else {
-            console.error("Failed to get data from Bitly API", error.message);
-          }
-        }
+        totalClicksForLink = await fetchBitlyData(post);
       }
-      if (post.media_id) {
-        try {
-          // MAKE A CALL TO INSTAGRAM API
-          const insightsUrl = `https://graph.facebook.com/v18.0/${post.media_id}/insights?access_token=${post.token}&metric=views,comments,likes,shares`;
-          const insightsResponse = await axios.get(insightsUrl);
-          const insightsData = insightsResponse.data;
-          if (insightsData.error) {
-            throw new Error(insightsData.error.message);
-          }
-          let performance_data = {};
-          if (insightsData.data && insightsData.data.length > 0) {
-            const plays = insightsData.data[0].values[0].value;
-            const comments = insightsData.data[1].values[0].value;
-            const likes = insightsData.data[2].values[0].value;
-            const shares = insightsData.data[3].values[0].value;
+      try {
+        // Always use fetchInstagramData, regardless of media_id
+        const performance_data = await fetchInstagramData(
+          post,
+          totalClicksForLink,
+          campaign_id,
+        );
 
-            performance_data = {
-              views: plays,
-              comments: comments,
-              likes: likes,
-              shares: shares,
-              clicks: totalClicksForLink,
-              updated: moment().format(),
-            };
-          }
+        if (performance_data && Object.keys(performance_data).length > 0) {
+          updateDatabaseWithPerformanceData(
+            performance_data,
+            post,
+            campaign_id,
+            brand_id,
+          );
 
-          const performanceRef = firebase
-            .database()
-            .ref(
-              `influencer_campaigns/${campaign_id}/tasks/${post.task_id}/posts/${post.post_id}/performance`,
-            );
-          const newPerformanceRef = performanceRef.push();
-          newPerformanceRef.set(performance_data);
-
-          const influencerTasksRef = firebase
-            .database()
-            .ref(
-              `influencer_tasks/${post.task_id}/posts/${post.post_id}/performance`,
-            );
-          const newInfluencerTasksRef = influencerTasksRef.push();
-          newInfluencerTasksRef.set(performance_data);
-
-          const userInfluencerTasksRef = firebase
-            .database()
-            .ref(
-              `users/${post.creator_id}/influencer_tasks/${post.task_id}/posts/${post.post_id}/performance`,
-            );
-          const newUserInfluencerTasksRef = userInfluencerTasksRef.push();
-          newUserInfluencerTasksRef.set(performance_data);
-
-          const brandInfluencerCampaignsRef = firebase
-            .database()
-            .ref(
-              `brands/${brand_id}/influencer_campaigns/${campaign_id}/tasks/${post.task_id}/posts/${post.post_id}/performance`,
-            );
-          const newBrandInfluencerCampaignsRef =
-            brandInfluencerCampaignsRef.push();
-          newBrandInfluencerCampaignsRef.set(performance_data);
-          if (Object.keys(performance_data).length === 0) {
-            totalPosts += 1;
-            continue;
-          } else {
-            totalViews += performance_data.views;
-            totalLikes += performance_data.likes;
-            totalShares += performance_data.shares;
-            totalComments += performance_data.comments;
-            totalClicks += performance_data.clicks;
-            totalPosts += 1;
-          }
-        } catch (error) {
-          console.log("error:" + error);
-
-          // Fetch the last added performance object
-          const performanceRef = firebase
-            .database()
-            .ref(
-              `influencer_campaigns/${campaign_id}/tasks/${post.task_id}/posts/${post.post_id}/performance`,
-            );
-          const snapshot = await performanceRef
-            .orderByChild("updated")
-            .limitToLast(1)
-            .once("value");
-
-          let lastPerformance;
-          snapshot.forEach((childSnapshot) => {
-            const key = childSnapshot.key;
-            if (key.startsWith("-")) {
-              lastPerformance = childSnapshot.val();
-            }
-          });
-
-          if (lastPerformance) {
-            // Copy the data over to newPerformanceRef
-            lastPerformance.updated = moment().format();
-            const newPerformanceRef = performanceRef.push();
-            newPerformanceRef.set(lastPerformance);
-
-            // Add the values from lastPerformance to the totals
-            totalViews += lastPerformance.views || 0;
-            totalLikes += lastPerformance.likes || 0;
-            totalShares += lastPerformance.shares || 0;
-            totalComments += lastPerformance.comments || 0;
-            totalClicks += lastPerformance.clicks || 0;
-          }
-        }
-      } else if (!post.media_id) {
-        const postSnapshot = await firebase
-          .database()
-          .ref(
-            `influencer_campaigns/${campaign_id}/tasks/${post.task_id}/posts/${post.post_id}`,
-          )
-          .once("value");
-        const postValue = postSnapshot.val();
-
-        if (!postValue.performance) {
+          totalViews += performance_data.views || 0;
+          totalLikes += performance_data.likes || 0;
+          totalShares += performance_data.shares || 0;
+          totalComments += performance_data.comments || 0;
+          totalClicks += performance_data.clicks || 0;
+          totalPosts += 1;
+        } else {
+          totalPosts += 1;
           continue;
         }
-        const performanceUpdate = {
-          likes: parseFloat(postValue.performance.likes),
-          comments: parseFloat(postValue.performance.comments),
-          shares: parseFloat(postValue.performance.shares),
-          views: parseFloat(postValue.performance.views),
-          updated: moment().format(),
-        };
-
-        const postRef = firebase
-          .database()
-          .ref(
-            `influencer_campaigns/${campaign_id}/tasks/${post.task_id}/posts/${post.post_id}/performance`,
-          );
-
-        await postRef.update(performanceUpdate);
-
-        totalViews += parseInt(postValue.performance.views);
-        totalLikes += parseInt(postValue.performance.likes);
-        totalShares += parseInt(postValue.performance.shares);
-        totalComments += parseInt(postValue.performance.comments);
-        totalPosts += 1;
+      } catch (error) {
+        // No need to fetch from Firebase here, handled in fetchInstagramData
+        console.error(
+          `[ERROR] Failed to fetch TikTok data for post ID: ${post.post_id} in campaign ${campaign_id}: `,
+          error,
+        );
       }
     }
 
@@ -393,6 +251,7 @@ const isPerformanceValid = (metrics) => {
 };
 
 async function fetchTikTokData(post, campaign_id, task_id) {
+  console.log("Post: ", post);
   const headers = {
     Authorization: `Bearer ${post.token}`,
     "Content-Type": "application/json",
@@ -421,6 +280,7 @@ async function fetchTikTokData(post, campaign_id, task_id) {
       comments: responseData.data.videos[0].comment_count,
       shares: responseData.data.videos[0].share_count,
       views: responseData.data.videos[0].view_count,
+      date: moment().format(),
     };
 
     return analytics;
@@ -430,64 +290,51 @@ async function fetchTikTokData(post, campaign_id, task_id) {
 
     console.error(
       "[ERROR] Failed to fetch TikTok post information: ",
-      error.response.status,
+      error.response?.status,
       message,
     );
 
-    // Fetch the initial data from Firebase
-    console.log(
-      `[INFO] Fetching post data from Firebase for post ID: ${post.post_id}`,
-    );
-
-    const postsRef = firebase
-      .database()
-      .ref(
-        `influencer_campaigns/${campaign_id}/tasks/${task_id}/posts/${post.post_id}`,
+    try {
+      // Fetch the latest valid performance object from Firebase (same as Instagram)
+      console.log(
+        `[INFO] Fetching post data from Firebase for post ID: ${post.post_id}`,
       );
-    const postsSnapshot = await postsRef.once("value");
-    const storedPost = postsSnapshot.val();
 
-    if (Object.keys(storedPost).length === 0) {
-      console.warn(
-        `[WARN] No post found for campaign ${campaign_id}, task ${task_id}, post ${post.post_id}`,
-      );
-      return null;
-    }
+      const performanceRef = firebase
+        .database()
+        .ref(
+          `influencer_campaigns/${campaign_id}/tasks/${task_id}/posts/${post.post_id}/performance`,
+        );
+      const snapshot = await performanceRef
+        .orderByChild("updated")
+        .limitToLast(1)
+        .once("value");
 
-    // Get the last object that starts with "-" from the performance data
-    const { performance: metrics } = storedPost;
+      let lastPerformance;
+      snapshot.forEach((childSnapshot) => {
+        const key = childSnapshot.key;
+        if (key.startsWith("-")) {
+          lastPerformance = childSnapshot.val();
+        }
+      });
 
-    if (!metrics) {
-      console.warn(
-        `[WARN] No performance metrics found for post ID: ${post.post_id}`,
-      );
-      return null;
-    }
+      if (lastPerformance) {
+        if (!isPerformanceValid(lastPerformance)) {
+          return null;
+        }
 
-    const metricsKeys = Object.keys(metrics);
-    const lastObjectKey = metricsKeys
-      .filter((key) => key.startsWith("-"))
-      .sort()
-      .pop();
+        lastPerformance.date = moment().format();
 
-    // If no valid last object key is found, return null
-    if (lastObjectKey) {
-      if (!isPerformanceValid(metrics[lastObjectKey])) {
-        return null;
+        return lastPerformance;
       }
 
-      const analytics = {
-        likes: metrics[lastObjectKey]?.likes,
-        comments: metrics[lastObjectKey]?.comments,
-        shares: metrics[lastObjectKey]?.shares,
-        views: metrics[lastObjectKey]?.views,
-        clicks: metrics[lastObjectKey]?.clicks,
-      };
-
-      return analytics;
+      return null;
+    } catch (fbError) {
+      console.error(
+        "[ERROR] Failed to fetch TikTok performance from Firebase: ",
+        fbError.message,
+      );
     }
-
-    return null;
   }
 }
 
@@ -510,8 +357,8 @@ async function fetchBitlyData(post) {
       error?.response?.statusText || error.message || "Unknown error";
 
     console.error(
-      "[ERRPR] Failed to get data from Bitly API: ",
-      error.response.status,
+      "[ERROR] Failed to get data from Bitly API: ",
+      error.response?.status,
       message,
     );
 
@@ -554,6 +401,105 @@ function updateDatabaseWithPerformanceData(
     );
   const newBrandInfluencerCampaignsRef = brandInfluencerCampaignsRef.push();
   newBrandInfluencerCampaignsRef.set(performance_data);
+}
+
+/**
+ * Fetch Instagram insights for a post, or fallback to Firebase if needed.
+ * @param {object} post - The post object containing media_id, token, etc.
+ * @param {number} totalClicksForLink - The total clicks for the Bitly link.
+ * @param {string} campaign_id - Campaign ID.
+ * @returns {object} performance_data or empty object if failed.
+ */
+async function fetchInstagramData(post, totalClicksForLink, campaign_id) {
+  if (!post.media_id) {
+    throw new Error("Missing media_id");
+  }
+
+  try {
+    const insightsUrl = `https://graph.facebook.com/v18.0/${post.media_id}/insights?access_token=${post.token}&metric=views,comments,likes,shares`;
+    const insightsResponse = await axios.get(insightsUrl);
+    const { data: insightsData } = insightsResponse;
+
+    if (insightsData.error) {
+      throw new Error(insightsData.error.message);
+    }
+
+    let performance_data = {};
+
+    if (insightsData.data && insightsData.data.length > 0) {
+      const plays = insightsData.data[0].values[0].value;
+      const comments = insightsData.data[1].values[0].value;
+      const likes = insightsData.data[2].values[0].value;
+      const shares = insightsData.data[3].values[0].value;
+
+      performance_data = {
+        views: plays,
+        comments: comments,
+        likes: likes,
+        shares: shares,
+        clicks: totalClicksForLink,
+        updated: moment().format(),
+      };
+    }
+
+    return performance_data;
+  } catch (error) {
+    const message =
+      error?.response?.statusText || error.message || "Unknown error";
+
+    console.error(
+      "[ERROR] Failed to fetch Instagram post information: ",
+      error.response?.status,
+      message,
+    );
+
+    try {
+      // Fetch the latest valid performance object from Firebase (same as TikTok)
+      console.log(
+        `[INFO] Fetching post data from Firebase for post ID: ${post.post_id}`,
+      );
+
+      const performanceRef = firebase
+        .database()
+        .ref(
+          `influencer_campaigns/${campaign_id}/tasks/${post.task_id}/posts/${post.post_id}/performance`,
+        );
+      const snapshot = await performanceRef
+        .orderByChild("updated")
+        .limitToLast(1)
+        .once("value");
+
+      let lastPerformance;
+      snapshot.forEach((childSnapshot) => {
+        const key = childSnapshot.key;
+        if (key.startsWith("-")) {
+          lastPerformance = childSnapshot.val();
+        }
+      });
+
+      if (lastPerformance) {
+        if (!isPerformanceValid(lastPerformance)) {
+          return null;
+        }
+
+        lastPerformance.updated = moment().format();
+
+        return lastPerformance;
+      }
+
+      return null;
+    } catch (fbError) {
+      console.error(
+        "[ERROR] Failed to fetch Instagram performance from Firebase: ",
+        fbError.message,
+      );
+    }
+    console.error(
+      "[ERROR] Failed to fetch Instagram insights: ",
+      error.message,
+    );
+    return {};
+  }
 }
 
 module.exports = {

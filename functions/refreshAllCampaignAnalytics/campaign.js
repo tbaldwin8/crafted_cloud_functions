@@ -52,8 +52,6 @@ const refreshAllCampaignAnalytics = async (req, res) => {
           }
           try {
             await processCampaignAnalytics({
-              firebase,
-              moment,
               campaign_id,
               campaign,
               curDate,
