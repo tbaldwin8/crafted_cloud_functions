@@ -189,7 +189,7 @@ async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
       } catch (error) {
         // No need to fetch from Firebase here, handled in fetchInstagramData
         console.error(
-          `[ERROR] Failed to fetch TikTok data for post ID: ${post.post_id} in campaign ${campaign_id}: `,
+          `[ERROR] Failed to fetch Instagram data for post ID: ${post.post_id} in campaign ${campaign_id}: `,
           error,
         );
       }
@@ -411,11 +411,11 @@ function updateDatabaseWithPerformanceData(
  * @returns {object} performance_data or empty object if failed.
  */
 async function fetchInstagramData(post, totalClicksForLink, campaign_id) {
-  if (!post.media_id) {
-    throw new Error("Missing media_id");
-  }
-
   try {
+    if (!post.media_id) {
+      throw new Error("Missing media_id");
+    }
+
     const insightsUrl = `https://graph.facebook.com/v18.0/${post.media_id}/insights?access_token=${post.token}&metric=views,comments,likes,shares`;
     const insightsResponse = await axios.get(insightsUrl);
     const { data: insightsData } = insightsResponse;
