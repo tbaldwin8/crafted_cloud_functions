@@ -35,7 +35,7 @@ async function processCampaignAnalytics({
     return;
   }
 
-  if (Object.keys(historical_analytics).length === 0) {
+  if (!historical_analytics || Object.keys(historical_analytics).length === 0) {
     console.warn(
       `[WARN] No historical_analytics found for campaign ${campaign_id}`,
     );

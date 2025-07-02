@@ -2,7 +2,6 @@ require("dotenv").config();
 const firebase = require(process.env.PRODEV);
 const moment = require("moment");
 const axios = require("axios");
-const cors = require("cors")({ origin: true });
 
 /**
  * Processes analytics for a single campaign.
@@ -194,51 +193,25 @@ async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
         );
       }
     }
-
-    // 4 - iterate through each object in the post performance array and save the total number of posts, total Views, Likes, Comments, Shares -> write this info under the analytics tab for a campaign
-    let campaignUpdate = {
-      totalViews,
-      totalLikes,
-      totalComments,
-      totalShares,
-      totalPosts: posts,
-      totalClicks,
-      updated: curDate,
-    };
-
-    campaignUpdate = Object.entries(campaignUpdate).reduce(
-      (updatedCampaign, [key, value]) => {
-        updatedCampaign[key] =
-          key === "updated" ? value : isNaN(value) ? 0 : value;
-        return updatedCampaign;
-      },
-      {},
-    );
-
-    campaignUpdate = Object.entries(campaignUpdate).reduce(
-      (updatedCampaign, [key, value]) => {
-        updatedCampaign[key] =
-          key === "updated" ? value : isNaN(value) ? 0 : value;
-        return updatedCampaign;
-      },
-      {},
-    );
-
-    const brandAnalyticsRef = firebase
-      .database()
-      .ref(
-        `brands/${brand_id}/influencer_campaigns/${campaign_id}/historical_analytics`,
-      );
-    const newBrandAnalyticsRef = brandAnalyticsRef.push();
-    newBrandAnalyticsRef.set(campaignUpdate);
-
-    const influencerCampaignsAnalyticsRef = firebase
-      .database()
-      .ref(`influencer_campaigns/${campaign_id}/historical_analytics`);
-    const newInfluencerCampaignsAnalyticsRef =
-      influencerCampaignsAnalyticsRef.push();
-    newInfluencerCampaignsAnalyticsRef.set(campaignUpdate);
   }
+
+  // 4 - prepare the campaign update object
+  let campaignUpdate = {
+    totalViews: safeNumber(totalViews),
+    totalLikes: safeNumber(totalLikes),
+    totalComments: safeNumber(totalComments),
+    totalShares: safeNumber(totalShares),
+    totalPosts: safeNumber(posts),
+    totalClicks: safeNumber(totalClicks),
+    updated: curDate,
+  };
+
+  // 5 - save the historical point for the campaign
+  saveHistoricalPoint(campaignUpdate, brand_id, campaign_id);
+}
+
+function safeNumber(val) {
+  return isNaN(val) ? 0 : val;
 }
 
 const isPerformanceValid = (metrics) => {
@@ -366,43 +339,6 @@ async function fetchBitlyData(post) {
   }
 }
 
-function updateDatabaseWithPerformanceData(
-  performance_data,
-  post,
-  campaign_id,
-  brand_id,
-) {
-  const performanceRef = firebase
-    .database()
-    .ref(
-      `influencer_campaigns/${campaign_id}/tasks/${post.task_id}/posts/${post.post_id}/performance`,
-    );
-  const newPerformanceRef = performanceRef.push();
-  newPerformanceRef.set(performance_data);
-
-  const influencerTasksRef = firebase
-    .database()
-    .ref(`influencer_tasks/${post.task_id}/posts/${post.post_id}/performance`);
-  const newInfluencerTasksRef = influencerTasksRef.push();
-  newInfluencerTasksRef.set(performance_data);
-
-  const userInfluencerTasksRef = firebase
-    .database()
-    .ref(
-      `users/${post.creator_id}/influencer_tasks/${post.task_id}/posts/${post.post_id}/performance`,
-    );
-  const newUserInfluencerTasksRef = userInfluencerTasksRef.push();
-  newUserInfluencerTasksRef.set(performance_data);
-
-  const brandInfluencerCampaignsRef = firebase
-    .database()
-    .ref(
-      `brands/${brand_id}/influencer_campaigns/${campaign_id}/tasks/${post.task_id}/posts/${post.post_id}/performance`,
-    );
-  const newBrandInfluencerCampaignsRef = brandInfluencerCampaignsRef.push();
-  newBrandInfluencerCampaignsRef.set(performance_data);
-}
-
 /**
  * Fetch Instagram insights for a post, or fallback to Firebase if needed.
  * @param {object} post - The post object containing media_id, token, etc.
@@ -500,6 +436,60 @@ async function fetchInstagramData(post, totalClicksForLink, campaign_id) {
     );
     return {};
   }
+}
+
+function updateDatabaseWithPerformanceData(
+  performance_data,
+  post,
+  campaign_id,
+  brand_id,
+) {
+  const performanceRef = firebase
+    .database()
+    .ref(
+      `influencer_campaigns/${campaign_id}/tasks/${post.task_id}/posts/${post.post_id}/performance`,
+    );
+  const newPerformanceRef = performanceRef.push();
+  newPerformanceRef.set(performance_data);
+
+  const influencerTasksRef = firebase
+    .database()
+    .ref(`influencer_tasks/${post.task_id}/posts/${post.post_id}/performance`);
+  const newInfluencerTasksRef = influencerTasksRef.push();
+  newInfluencerTasksRef.set(performance_data);
+
+  const userInfluencerTasksRef = firebase
+    .database()
+    .ref(
+      `users/${post.creator_id}/influencer_tasks/${post.task_id}/posts/${post.post_id}/performance`,
+    );
+  const newUserInfluencerTasksRef = userInfluencerTasksRef.push();
+  newUserInfluencerTasksRef.set(performance_data);
+
+  const brandInfluencerCampaignsRef = firebase
+    .database()
+    .ref(
+      `brands/${brand_id}/influencer_campaigns/${campaign_id}/tasks/${post.task_id}/posts/${post.post_id}/performance`,
+    );
+  const newBrandInfluencerCampaignsRef = brandInfluencerCampaignsRef.push();
+  newBrandInfluencerCampaignsRef.set(performance_data);
+}
+
+function saveHistoricalPoint(metrics, brand_id, campaign_id) {
+  const brandAnalyticsRef = firebase
+    .database()
+    .ref(
+      `brands/${brand_id}/influencer_campaigns/${campaign_id}/historical_analytics`,
+    );
+  const newBrandAnalyticsRef = brandAnalyticsRef.push();
+  newBrandAnalyticsRef.set(metrics);
+
+  const influencerCampaignsAnalyticsRef = firebase
+    .database()
+    .ref(`influencer_campaigns/${campaign_id}/historical_analytics`);
+  const newInfluencerCampaignsAnalyticsRef =
+    influencerCampaignsAnalyticsRef.push();
+  newInfluencerCampaignsAnalyticsRef.set(metrics);
 }
 
 module.exports = {
