@@ -63,9 +63,7 @@ const refreshTiktokAccessTokens = async (req, res) => {
                 .then(async (responseData) => {
                   const accessToken = responseData.access_token;
                   if (!accessToken) {
-                    console.log(
-                      `Access token for user ${key} is undefined.`,
-                    );
+                    console.log(`Access token for user ${key} is undefined.`);
                     return Promise.resolve();
                   }
                   const accessExpiresAt = moment()
@@ -94,9 +92,7 @@ const refreshTiktokAccessTokens = async (req, res) => {
                   // Setting the access_token in the database
                   const tok = firebase
                     .database()
-                    .ref(
-                      `users/${key}/creator_socials/tiktok/access_token`,
-                    );
+                    .ref(`users/${key}/creator_socials/tiktok/access_token`);
                   await tok.set(accessToken);
                 })
                 .catch((error) => {
