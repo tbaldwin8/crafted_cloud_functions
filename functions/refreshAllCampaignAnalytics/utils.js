@@ -5,6 +5,9 @@ const axios = require("axios");
 
 /**
  * Processes analytics for a single campaign.
+ * @param {string} params.campaign_id - The campaign ID.
+ * @param {object} params.campaign - The campaign data object.
+ * @param {string} params.curDate - The current date string.
  */
 async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
   let { brand_id } = campaign;
@@ -210,10 +213,20 @@ async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
   saveHistoricalPoint(campaignUpdate, brand_id, campaign_id);
 }
 
+/**
+ * Ensures the value is a number, returns 0 if NaN.
+ * @param {*} val - The value to check.
+ * @returns {number}
+ */
 function safeNumber(val) {
   return isNaN(val) ? 0 : val;
 }
 
+/**
+ * Checks if the metrics object contains all required performance fields.
+ * @param {object} metrics - The metrics object.
+ * @returns {boolean}
+ */
 const isPerformanceValid = (metrics) => {
   return (
     "likes" in metrics &&
@@ -223,6 +236,13 @@ const isPerformanceValid = (metrics) => {
   );
 };
 
+/**
+ * Fetches TikTok analytics data for a post, or falls back to Firebase if needed.
+ * @param {object} post - The post object containing video_id, token, etc.
+ * @param {string} campaign_id - The campaign ID.
+ * @param {string} task_id - The task ID.
+ * @returns {object|null} Analytics data or null if not found.
+ */
 async function fetchTikTokData(post, campaign_id, task_id) {
   console.log("Post: ", post);
   const headers = {
@@ -279,7 +299,7 @@ async function fetchTikTokData(post, campaign_id, task_id) {
           `influencer_campaigns/${campaign_id}/tasks/${task_id}/posts/${post.post_id}/performance`,
         );
       const snapshot = await performanceRef
-        .orderByChild("updated")
+        .orderByChild("date")
         .limitToLast(1)
         .once("value");
 
@@ -311,6 +331,11 @@ async function fetchTikTokData(post, campaign_id, task_id) {
   }
 }
 
+/**
+ * Fetches Bitly click data for a post's short link.
+ * @param {object} post - The post object containing short_link.
+ * @returns {number} Total clicks for the Bitly link.
+ */
 async function fetchBitlyData(post) {
   const shortLink = post.short_link.replace("https://", "");
   try {
@@ -438,6 +463,13 @@ async function fetchInstagramData(post, totalClicksForLink, campaign_id) {
   }
 }
 
+/**
+ * Updates the database with performance data for a post in multiple locations.
+ * @param {object} performance_data - The analytics/performance data.
+ * @param {object} post - The post object.
+ * @param {string} campaign_id - The campaign ID.
+ * @param {string} brand_id - The brand ID.
+ */
 function updateDatabaseWithPerformanceData(
   performance_data,
   post,
@@ -475,6 +507,12 @@ function updateDatabaseWithPerformanceData(
   newBrandInfluencerCampaignsRef.set(performance_data);
 }
 
+/**
+ * Saves a historical analytics point for a campaign in the brand and campaign nodes.
+ * @param {object} metrics - The metrics object.
+ * @param {string} brand_id - The brand ID.
+ * @param {string} campaign_id - The campaign ID.
+ */
 function saveHistoricalPoint(metrics, brand_id, campaign_id) {
   const brandAnalyticsRef = firebase
     .database()
