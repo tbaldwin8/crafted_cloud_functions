@@ -209,8 +209,9 @@ async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
     updated: curDate,
   };
 
-  // 5 - save the historical point for the campaign
-  saveHistoricalPoint(campaignUpdate, brand_id, campaign_id);
+  // 5 - save the historical point and realtime analytics for the campaign
+  await saveHistoricalPoint(campaignUpdate, brand_id, campaign_id);
+  await saveRealtimeAnalytics(campaignUpdate, campaign_id, brand_id);
 }
 
 /**
@@ -513,21 +514,41 @@ function updateDatabaseWithPerformanceData(
  * @param {string} brand_id - The brand ID.
  * @param {string} campaign_id - The campaign ID.
  */
-function saveHistoricalPoint(metrics, brand_id, campaign_id) {
+async function saveHistoricalPoint(metrics, brand_id, campaign_id) {
   const brandAnalyticsRef = firebase
     .database()
     .ref(
       `brands/${brand_id}/influencer_campaigns/${campaign_id}/historical_analytics`,
     );
   const newBrandAnalyticsRef = brandAnalyticsRef.push();
-  newBrandAnalyticsRef.set(metrics);
+  await newBrandAnalyticsRef.set(metrics);
 
   const influencerCampaignsAnalyticsRef = firebase
     .database()
     .ref(`influencer_campaigns/${campaign_id}/historical_analytics`);
   const newInfluencerCampaignsAnalyticsRef =
     influencerCampaignsAnalyticsRef.push();
-  newInfluencerCampaignsAnalyticsRef.set(metrics);
+  await newInfluencerCampaignsAnalyticsRef.set(metrics);
+}
+
+/**
+ * Updates realtime analytics for a campaign in the brand and campaign nodes.
+ * @param {object} metrics - The metrics object.
+ * @param {string} brand_id - The brand ID.
+ * @param {string} campaign_id - The campaign ID.
+ */
+async function saveRealtimeAnalytics(metrics, campaign_id, brand_id) {
+  const brandAnalyticsRef = firebase
+    .database()
+    .ref(
+      `brands/${brand_id}/influencer_campaigns/${campaign_id}/realtime_analytics`,
+    );
+  await brandAnalyticsRef.update(metrics);
+
+  const influencerCampaignsAnalyticsRef = firebase
+    .database()
+    .ref(`influencer_campaigns/${campaign_id}/realtime_analytics`);
+  await influencerCampaignsAnalyticsRef.update(metrics);
 }
 
 module.exports = {
