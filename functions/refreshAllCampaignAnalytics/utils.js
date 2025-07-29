@@ -18,6 +18,8 @@ async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
   let totalPosts = 0;
   let posts = 0;
   let totalClicks = 0;
+  // Track which creator_ids have already had their clicks counted
+  const countedClicksCreators = new Set();
   const tiktok_posts = [];
   const instagram_posts = [];
   const { tasks } = campaign;
@@ -126,12 +128,22 @@ async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
         }
         console.log("[INFO] TikTok post data: ", performance_data);
 
-        // Make call to Bitly API
-        if (post.short_link && post.short_link !== "") {
-          const totalClicksForLink = await fetchBitlyData(post);
-          performance_data.clicks =
-            totalClicksForLink || performance_data.clicks || 0;
+        // Make call to Bitly API, but only aggregate clicks once per creator_id
+        let totalClicksForLink = 0;
+        if (
+          post.short_link &&
+          post.short_link !== "" &&
+          !countedClicksCreators.has(post.creator_id)
+        ) {
+          totalClicksForLink = await fetchBitlyData(post);
+          countedClicksCreators.add(post.creator_id);
+          totalClicks += totalClicksForLink || 0;
+        } else if (post.short_link && post.short_link !== "") {
+          // Fetch clicks for updating performance_data, but don't aggregate to totalClicks
+          totalClicksForLink = await fetchBitlyData(post);
         }
+        performance_data.clicks =
+          totalClicksForLink || performance_data.clicks || 0;
 
         // Update your database with performance data
         updateDatabaseWithPerformanceData(
@@ -141,12 +153,12 @@ async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
           brand_id,
         );
 
-        // Update totals
+        // Update totals (do not aggregate clicks here)
         totalViews += performance_data.views;
         totalLikes += performance_data.likes;
         totalShares += performance_data.shares;
         totalComments += performance_data.comments;
-        totalClicks += performance_data.clicks;
+        // totalClicks handled above
         totalPosts += 1;
       } catch (error) {
         // Handle errors
@@ -159,7 +171,17 @@ async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
 
     for (const post of instagram_posts) {
       let totalClicksForLink = 0;
-      if (post.short_link && post.short_link !== "") {
+      // Only aggregate clicks once per creator_id
+      if (
+        post.short_link &&
+        post.short_link !== "" &&
+        !countedClicksCreators.has(post.creator_id)
+      ) {
+        totalClicksForLink = await fetchBitlyData(post);
+        countedClicksCreators.add(post.creator_id);
+        totalClicks += totalClicksForLink || 0;
+      } else if (post.short_link && post.short_link !== "") {
+        // Fetch clicks for updating performance_data, but don't aggregate to totalClicks
         totalClicksForLink = await fetchBitlyData(post);
       }
       try {
@@ -182,7 +204,7 @@ async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
           totalLikes += performance_data.likes || 0;
           totalShares += performance_data.shares || 0;
           totalComments += performance_data.comments || 0;
-          totalClicks += performance_data.clicks || 0;
+          // totalClicks handled above
           totalPosts += 1;
         } else {
           totalPosts += 1;
