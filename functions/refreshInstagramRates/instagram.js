@@ -7,11 +7,102 @@ const moment = require("moment");
 const BATCH_SIZE_USERS = 100; // Adjust as needed
 const BATCH_SIZE_MEDIA = 5; // Adjust this number based on how many concurrent requests you want for media IDs
 
+async function processUserInstagramRate(creator_id, user) {
+  // Check if negotiated
+  if (user && user.negotiated === true) {
+    console.log(`[INFO] Skipping user ${creator_id} due to negotiated=true`);
+    return { skipped: true, reason: "negotiated" };
+  }
+
+  const instagramInfo = user?.creator_socials?.instagram;
+
+  if (
+    !instagramInfo?.instagram_business_account_id ||
+    !instagramInfo?.access_token
+  ) {
+    console.warn(
+      `[WARN] Missing Instagram info for user ${creator_id}, skipping`,
+    );
+    return { skipped: true, reason: "missing_instagram_info" };
+  }
+
+  console.log(`[INFO] Calculating suggested rate for user ${creator_id}`);
+  const suggestedRate = await calculateSuggestedRate(
+    instagramInfo.access_token,
+    instagramInfo.instagram_business_account_id,
+  );
+
+  if (!suggestedRate) {
+    throw new Error(
+      `Failed to calculate suggested rate for creator ${creator_id}`,
+    );
+  }
+
+  await firebase
+    .database()
+    .ref(`users/${creator_id}/creator_socials/instagram`)
+    .update({
+      suggested_rate: suggestedRate,
+      updated: moment().format(),
+    });
+
+  console.log(`[INFO] Updated suggested rate for user ${creator_id}`);
+  return { success: true, suggestedRate };
+}
+
 const refreshInstagramRates = async (req, res) => {
   cors(req, res, async () => {
     try {
       console.log("[INFO] Starting Instagram rates refresh process");
       const usersRef = firebase.database().ref("users");
+
+      // Check for user_id in query
+      const userId = req.query.user_id;
+      if (userId) {
+        // Process only the specified user
+        const snapshot = await usersRef.child(userId).once("value");
+        const user = snapshot.val();
+
+        if (!user) {
+          console.warn(`[WARN] User ${userId} not found or is null.`);
+          return res.status(404).json({
+            status: "404",
+            statuscode: "-1",
+            message: `User ${userId} not found.`,
+          });
+        }
+
+        try {
+          const result = await processUserInstagramRate(userId, user);
+
+          if (result.skipped) {
+            return res.status(200).json({
+              status: "200",
+              statuscode: "1",
+              message: `User ${userId} skipped: ${result.reason}`,
+            });
+          }
+
+          console.log(
+            `[SUCCESS] Processed Instagram rate for user ${userId}`,
+          );
+          return res.status(200).json({
+            status: "200",
+            statuscode: "1",
+            message: `Successfully updated Instagram rate for user ${userId}`,
+            suggestedRate: result.suggestedRate,
+          });
+        } catch (err) {
+          console.error(`[ERROR] Failed processing user ${userId}:`, err);
+          return res.status(500).json({
+            status: "500",
+            statuscode: "-1",
+            message: `Failed to process user ${userId}.`,
+          });
+        }
+      }
+
+      // Process all users in batches
       let lastKey = null;
       let moreUsers = true;
 
@@ -37,62 +128,14 @@ const refreshInstagramRates = async (req, res) => {
         console.log(`[INFO] Processing batch with ${userKeys.length} users`);
 
         const updatePromises = userKeys.map(async (creator_id) => {
-          const user = users[creator_id];
-
-          if (user && user.negotiated === true) {
-            console.log(
-              `[INFO] Skipping user ${creator_id} due to negotiated=true`,
+          try {
+            return await processUserInstagramRate(creator_id, users[creator_id]);
+          } catch (error) {
+            console.error(
+              `[ERROR] Failed to process user ${creator_id}:`,
+              error,
             );
-            return;
-          }
-
-          const instagramInfo =
-            user && user.creator_socials && user.creator_socials.instagram;
-
-          if (
-            instagramInfo &&
-            instagramInfo.instagram_business_account_id &&
-            instagramInfo.access_token
-          ) {
-            try {
-              console.log(
-                `[INFO] Calculating suggested rate for user ${creator_id}`,
-              );
-              const suggestedRate = await calculateSuggestedRate(
-                instagramInfo.access_token,
-                instagramInfo.instagram_business_account_id,
-              );
-
-              if (!suggestedRate) {
-                console.error(
-                  `[ERROR] Failed to calculate a suggested rate for creator ${creator_id}`,
-                );
-                return null;
-              }
-
-              await firebase
-                .database()
-                .ref(`users/${creator_id}/creator_socials/instagram`)
-                .update({
-                  suggested_rate: suggestedRate,
-                  updated: moment().format(),
-                });
-
-              console.log(
-                `[INFO] Updated suggested rate for user ${creator_id}`,
-              );
-            } catch (error) {
-              console.error(
-                `[ERROR] Failed to calculate or update suggested rate for creator_id ${creator_id}:`,
-                error,
-              );
-
-              return;
-            }
-          } else {
-            console.warn(
-              `[WARN] Missing Instagram info for user ${creator_id}, skipping`,
-            );
+            return null;
           }
         });
 
@@ -113,7 +156,7 @@ const refreshInstagramRates = async (req, res) => {
 };
 
 async function calculateSuggestedRate(access_token, business_account_id) {
-  const mediaUrl = `https://graph.facebook.com/v20.0/${business_account_id}/media?fields=media_type&access_token=${access_token}&limit=300`;
+  const mediaUrl = `https://graph.facebook.com/v24.0/${business_account_id}/media?fields=media_type&access_token=${access_token}&limit=300`;
   console.log(
     `[INFO] Fetching media for business_account_id ${business_account_id}`,
   );
@@ -142,7 +185,7 @@ async function calculateSuggestedRate(access_token, business_account_id) {
 
     const playPromises = mediaBatch.map(async (mediaId) => {
       try {
-        const insightsUrl = `https://graph.facebook.com/v20.0/${mediaId}/insights?access_token=${access_token}&metric=views`;
+        const insightsUrl = `https://graph.facebook.com/v24.0/${mediaId}/insights?access_token=${access_token}&metric=views`;
         const insightsResponse = await fetch(insightsUrl);
         const insightsData = await insightsResponse.json();
 
@@ -198,4 +241,5 @@ function median(arr) {
 
 module.exports = {
   refreshInstagramRates,
+  processUserInstagramRate,
 };

@@ -1,7 +1,7 @@
 require("dotenv").config();
 const firebase = require(process.env.PRODEV);
 
-const FACEBOOK_18 = "https://graph.facebook.com/v18.0";
+const FACEBOOK_24 = "https://graph.facebook.com/v24.0";
 
 async function processInstagramPost(
   post,
@@ -25,7 +25,7 @@ async function processInstagramPost(
 
   const accessToken = tokenSnapshot.val();
   const instagramBusinessAccountId = idSnapshot.val();
-  const mediaUrl = `${FACEBOOK_18}/${instagramBusinessAccountId}/media?access_token=${accessToken}`;
+  const mediaUrl = `${FACEBOOK_24}/${instagramBusinessAccountId}/media?access_token=${accessToken}`;
   const mediaResponse = await fetch(mediaUrl);
   const mediaData = await mediaResponse.json();
   
@@ -47,7 +47,7 @@ async function processInstagramPost(
 
   for (const media of mediaData.data) {
     const mediaId = media.id;
-    const mediaFetch = `${FACEBOOK_18}/${mediaId}?fields=id,media_type,permalink&access_token=${accessToken}`;
+    const mediaFetch = `${FACEBOOK_24}/${mediaId}?fields=id,media_type,permalink&access_token=${accessToken}`;
     const mediaFetchResponse = await fetch(mediaFetch);
     const mediaFetchData = await mediaFetchResponse.json();
 

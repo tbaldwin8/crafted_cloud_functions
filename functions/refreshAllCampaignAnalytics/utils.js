@@ -267,7 +267,6 @@ const isPerformanceValid = (metrics) => {
  * @returns {object|null} Analytics data or null if not found.
  */
 async function fetchTikTokData(post, campaign_id, task_id) {
-  console.log("Post: ", post);
   const headers = {
     Authorization: `Bearer ${post.token}`,
     "Content-Type": "application/json",
@@ -400,7 +399,7 @@ async function fetchInstagramData(post, totalClicksForLink, campaign_id) {
       throw new Error("Missing media_id");
     }
 
-    const insightsUrl = `https://graph.facebook.com/v18.0/${post.media_id}/insights?access_token=${post.token}&metric=views,comments,likes,shares`;
+    const insightsUrl = `https://graph.facebook.com/v24.0/${post.media_id}/insights?access_token=${post.token}&metric=views,comments,likes,shares`;
     const insightsResponse = await axios.get(insightsUrl);
     const { data: insightsData } = insightsResponse;
 
