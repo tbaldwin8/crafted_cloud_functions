@@ -24,7 +24,6 @@ const fetchAndUpdateInstagramDemographics = async (req, res) => {
 
       for (const userId in usersData) {
         if (usersData.hasOwnProperty(userId)) {
-          console.log("Processing user: ", userId);
           const userData = usersData[userId];
           const instagramInfo =
             userData.creator_socials && userData.creator_socials.instagram;
@@ -37,13 +36,11 @@ const fetchAndUpdateInstagramDemographics = async (req, res) => {
             const business_account_id =
               instagramInfo.instagram_business_account_id;
             const access_token = instagramInfo.access_token;
-            console.log("ACCESS TOKEN: ", access_token);
-            console.log("BUSINESS ACCOUNT ID: ", business_account_id);
 
-            const cityApi = `https://graph.facebook.com/v18.0/${business_account_id}/insights?metric=follower_demographics&period=lifetime&breakdown=city&metric_type=total_value&access_token=${access_token}`;
-            const countryApi = `https://graph.facebook.com/v18.0/${business_account_id}/insights?metric=follower_demographics&period=lifetime&breakdown=country&metric_type=total_value&access_token=${access_token}`;
-            const genderApi = `https://graph.facebook.com/v18.0/${business_account_id}/insights?metric=follower_demographics&period=lifetime&breakdown=gender&metric_type=total_value&access_token=${access_token}`;
-            const ageApi = `https://graph.facebook.com/v18.0/${business_account_id}/insights?metric=follower_demographics&period=lifetime&breakdown=age&metric_type=total_value&access_token=${access_token}`;
+            const cityApi = `https://graph.facebook.com/v24.0/${business_account_id}/insights?metric=follower_demographics&period=lifetime&breakdown=city&metric_type=total_value&access_token=${access_token}`;
+            const countryApi = `https://graph.facebook.com/v24.0/${business_account_id}/insights?metric=follower_demographics&period=lifetime&breakdown=country&metric_type=total_value&access_token=${access_token}`;
+            const genderApi = `https://graph.facebook.com/v24.0/${business_account_id}/insights?metric=follower_demographics&period=lifetime&breakdown=gender&metric_type=total_value&access_token=${access_token}`;
+            const ageApi = `https://graph.facebook.com/v24.0/${business_account_id}/insights?metric=follower_demographics&period=lifetime&breakdown=age&metric_type=total_value&access_token=${access_token}`;
 
             try {
               const genderApiResponse = await axios.get(genderApi);
@@ -165,18 +162,20 @@ const fetchAndUpdateInstagramDemographics = async (req, res) => {
                 ageValues[age] = value;
               }
 
+              const demographics = {
+                gender: genderValues,
+                city: cityValues,
+                states: stateValues,
+                age: ageValues,
+                country: countryValues,
+                lastUpdated: new Date().toISOString(),
+              }
+
               // Store the extracted and sanitized values in Firebase
               await firebase
                 .database()
                 .ref(`users/${userId}/creator_socials/instagram/demographics`)
-                .update({
-                  gender: genderValues,
-                  city: cityValues,
-                  states: stateValues,
-                  age: ageValues,
-                  country: countryValues,
-                  lastUpdated: new Date().toISOString(),
-                });
+                .update(demographics);
             } catch (error) {
               console.error(
                 "Failed to fetch and store Instagram demographics data:",

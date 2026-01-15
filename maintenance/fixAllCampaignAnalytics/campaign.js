@@ -10,41 +10,8 @@ const refreshAllCampaignAnalytics = async (req, res) => {
   cors(req, res, async () => {
     try {
       const campaignsRef = firebase.database().ref("influencer_campaigns");
+
       let curDate = moment().format();
-
-      // Check for campaign_id in query
-      const campaignId = req.query.campaign_id;
-      if (campaignId) {
-        // Process only the specified campaign
-        const snapshot = await campaignsRef.child(campaignId).once("value");
-        const campaign = snapshot.val();
-        if (!campaign || Object.keys(campaign).length === 0) {
-          console.warn(`[WARN] Campaign ${campaignId} not found or is null.`);
-          return res.status(404).json({
-            statuscode: 404,
-            message: `Campaign ${campaignId} not found.`,
-          });
-        }
-        try {
-          await processCampaignAnalytics({
-            campaign_id: campaignId,
-            campaign,
-            curDate,
-          });
-          console.log(`[SUCCESS] Processed analytics for campaign ${campaignId}`);
-          return res.status(200).json({
-            statuscode: 200,
-            message: `Successfully updated analytics for campaign ${campaignId}`,
-          });
-        } catch (err) {
-          console.error(`[ERROR] Failed processing campaign ${campaignId}:`, err);
-          return res.status(500).json({
-            statuscode: 500,
-            message: `Failed to process campaign ${campaignId}.`,
-          });
-        }
-      }
-
       let lastKey = null;
       let moreCampaigns = true;
       let batchCount = 0;
@@ -85,6 +52,8 @@ const refreshAllCampaignAnalytics = async (req, res) => {
           }
           try {
             await processCampaignAnalytics({
+              firebase,
+              moment,
               campaign_id,
               campaign,
               curDate,
