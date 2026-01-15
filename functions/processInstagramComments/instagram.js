@@ -31,7 +31,7 @@ const processInstagramComments = async (req, res) => {
               if (creatorData && creatorData.instagram_business_account_id && creatorData.access_token) {
                 try {
                   // Making a request to the Instagram comments endpoint with access_token as a query parameter
-                  const url = `https://graph.facebook.com/${post.media_id}/comments?access_token=${creatorData.access_token}`;
+                  const url = `https://graph.facebook.com/v24.0/${post.media_id}/comments?access_token=${creatorData.access_token}`;
                   
                   // Retrieving comments from the API
                   const response = await axios.get(url);
